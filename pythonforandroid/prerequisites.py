@@ -385,11 +385,6 @@ def check_and_install_default_prerequisites():
 
     prerequisites_not_met = []
 
-    warning(
-        "prerequisites.py is experimental and does not support all prerequisites yet."
-    )
-    warning("Please report any issues to the python-for-android issue tracker.")
-
     # Phase 1: Check if all prerequisites are met and add the ones
     # which are not to `prerequisites_not_met`
     for prerequisite in get_required_prerequisites(sys.platform):
