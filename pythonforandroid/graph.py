@@ -240,7 +240,7 @@ def obvious_conflict_checker(ctx, name_tuples, blacklist=None):
     return None
 
 
-def get_recipe_order_and_bootstrap(ctx, names, bs=None, blacklist=None):
+def get_recipe_order_and_bootstrap(ctx, names, bs=None, blacklist=None, should_log = False):
     # Get set of recipe/dependency names, clean up and add bootstrap deps:
     names = set(names)
     if bs is not None and bs.recipe_depends:
@@ -311,7 +311,7 @@ def get_recipe_order_and_bootstrap(ctx, names, bs=None, blacklist=None):
         for order in orders:
             info('    {}'.format(order))
         info('Using the first of these: {}'.format(chosen_order))
-    else:
+    elif should_log:
         info('Found a single valid recipe set: {}'.format(chosen_order))
 
     if bs is None:
@@ -322,7 +322,7 @@ def get_recipe_order_and_bootstrap(ctx, names, bs=None, blacklist=None):
                 "Could not find any compatible bootstrap!"
             )
         recipes, python_modules, bs = get_recipe_order_and_bootstrap(
-            ctx, chosen_order, bs=bs, blacklist=blacklist
+            ctx, chosen_order, bs=bs, blacklist=blacklist, should_log=True
         )
     else:
         # check if each requirement has a recipe

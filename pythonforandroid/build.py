@@ -94,6 +94,8 @@ class Context:
 
     java_build_tool = 'auto'
 
+    save_prebuilt = False
+
     @property
     def packages_path(self):
         '''Where packages are downloaded before being unpacked'''
@@ -147,11 +149,16 @@ class Context:
                              'specify a path with --storage-dir')
         self.build_dir = join(self.storage_dir, 'build')
         self.dist_dir = join(self.storage_dir, 'dists')
+        self.prebuilt_dir = join(self.storage_dir, 'output')
 
     def ensure_dirs(self):
         ensure_dir(self.storage_dir)
         ensure_dir(self.build_dir)
         ensure_dir(self.dist_dir)
+
+        if self.save_prebuilt:
+            ensure_dir(self.prebuilt_dir)
+        
         ensure_dir(join(self.build_dir, 'bootstrap_builds'))
         ensure_dir(join(self.build_dir, 'other_builds'))
 

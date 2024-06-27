@@ -354,6 +354,10 @@ class Recipe(metaclass=RecipeMeta):
                 self.name, self.name))
             return
         self.download()
+    
+    @property
+    def download_dir(self):
+        return self.name + "_" + self.version
 
     def download(self):
         if self.url is None:
@@ -375,9 +379,9 @@ class Recipe(metaclass=RecipeMeta):
             if expected_digest:
                 expected_digests[alg] = expected_digest
 
-        ensure_dir(join(self.ctx.packages_path, self.name))
+        ensure_dir(join(self.ctx.packages_path, self.download_dir))
 
-        with current_directory(join(self.ctx.packages_path, self.name)):
+        with current_directory(join(self.ctx.packages_path, self.download_dir)):
             filename = shprint(sh.basename, url).stdout[:-1].decode('utf-8')
 
             do_download = True
@@ -451,7 +455,7 @@ class Recipe(metaclass=RecipeMeta):
 
             if not exists(directory_name) or not isdir(directory_name):
                 extraction_filename = join(
-                    self.ctx.packages_path, self.name, filename)
+                    self.ctx.packages_path, self.download_dir, filename)
                 if isfile(extraction_filename):
                     if extraction_filename.endswith(('.zip', '.whl')):
                         try:
@@ -569,9 +573,14 @@ class Recipe(metaclass=RecipeMeta):
         '''
         if not self.built_libraries:
             return
+
         shared_libs = [
             lib for lib in self.get_libraries(arch) if lib.endswith(".so")
         ]
+        
+        print( self.ctx.get_libs_dir(arch.arch), shared_libs)
+
+        exit()
         self.install_libs(arch, *shared_libs)
 
     def postbuild_arch(self, arch):
@@ -1197,7 +1206,7 @@ class PyProjectRecipe(PythonRecipe):
         return env
 
     def get_wheel_platform_tag(self, arch):
-        return "android_" + {
+        return f"android_{self.ctx.ndk_api}_" + {
             "armeabi-v7a": "arm",
             "arm64-v8a": "aarch64",
             "x86_64": "x86_64",
@@ -1215,17 +1224,19 @@ class PyProjectRecipe(PythonRecipe):
         )
         selected_wheel = join(built_wheel_dir, wheel_tag)
 
-        _dev_wheel_dir = environ.get("P4A_WHEEL_DIR", False)
-        if _dev_wheel_dir:
-            ensure_dir(_dev_wheel_dir)
-            shprint(sh.cp, selected_wheel, _dev_wheel_dir)
+        if self.ctx.save_prebuilt:
+            shprint(sh.cp, selected_wheel, self.ctx.prebuilt_dir)
+        
+        def _(arch, wheel_tag, selected_wheel):
+            info(f"Installing built wheel: {wheel_tag}")
+            destination = self.ctx.get_python_install_dir(arch.arch)
+            with WheelFile(selected_wheel) as wf:
+                for zinfo in wf.filelist:
+                    wf.extract(zinfo, destination)
+                wf.close()
 
-        info(f"Installing built wheel: {wheel_tag}")
-        destination = self.ctx.get_python_install_dir(arch.arch)
-        with WheelFile(selected_wheel) as wf:
-            for zinfo in wf.filelist:
-                wf.extract(zinfo, destination)
-            wf.close()
+        self.install_libraries = lambda arch, wheel_tag=wheel_tag, selected_wheel=selected_wheel : _(arch, wheel_tag, selected_wheel)
+
 
     def build_arch(self, arch):
         self.install_hostpython_prerequisites(
@@ -1253,6 +1264,7 @@ class PyProjectRecipe(PythonRecipe):
                 sh.Command(self.ctx.python_recipe.python_exe), *build_args, _env=env
             )
             built_wheels = [realpath(whl) for whl in glob.glob("dist/*.whl")]
+        
         self.install_wheel(arch, built_wheels)
 
 
