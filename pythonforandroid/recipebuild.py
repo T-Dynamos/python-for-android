@@ -43,17 +43,17 @@ class RecipeBuilder:
         recipes = [Recipe.get_recipe(recipe, self.ctx) for recipe in _recipes]
 
         self.ctx.recipe_build_order = recipes
-        #for recipe in recipes:
-        #    recipe.download_if_necessary()
+        for recipe in recipes:
+            recipe.download_if_necessary()
 
         for arch in self.ctx.archs:
             info_main("# Building all recipes for arch {}".format(arch.arch))
-            #
-            # info_main("# Unpacking recipes")
-            # for recipe in recipes:
-            #     ensure_dir(recipe.get_build_container_dir(arch.arch))
-            #     recipe.prepare_build_dir(arch.arch)
-            #
+
+            info_main("# Unpacking recipes")
+            for recipe in recipes:
+                ensure_dir(recipe.get_build_container_dir(arch.arch))
+                recipe.prepare_build_dir(arch.arch)
+
             info_main("# Prebuilding recipes")
             # 2) prebuild packages
             for recipe in recipes:

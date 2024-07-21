@@ -45,28 +45,17 @@ class OpenSSLRecipe(Recipe):
 
     '''
 
-    version = '3'
-    '''the major minor version used to link our recipes'''
-
-    url_version = '3.3.1'
-    '''the version used to download our libraries'''
-
-    url = 'https://www.openssl.org/source/openssl-{url_version}.tar.gz'
+    version = '3.3.1'
+    url = 'https://www.openssl.org/source/openssl-{version}.tar.gz'
 
     built_libraries = {
-        'libcrypto{version}.so'.format(version=version): '.',
-        'libssl{version}.so'.format(version=version): '.',
+        'libcrypto.so': '.',
+        'libssl.so': '.',
     }
-
-    @property
-    def versioned_url(self):
-        if self.url is None:
-            return None
-        return self.url.format(url_version=self.url_version)
 
     def get_build_dir(self, arch):
         return join(
-            self.get_build_container_dir(arch), self.name + self.version
+            self.get_build_container_dir(arch), self.name + self.version[0]
         )
 
     def include_flags(self, arch):
@@ -86,7 +75,7 @@ class OpenSSLRecipe(Recipe):
         '''Returns a string with the appropriate `-l<lib>` flags to link with
         the openssl libs. This string is usually added to the environment
         variable `LIBS`'''
-        return ' -lcrypto{version} -lssl{version}'.format(version=self.version)
+        return ' -lcrypto -lssl'
 
     def link_flags(self, arch):
         '''Returns a string with the flags to link with the openssl libraries
@@ -95,11 +84,11 @@ class OpenSSLRecipe(Recipe):
 
     def get_recipe_env(self, arch=None):
         env = super().get_recipe_env(arch)
-        env['OPENSSL_VERSION'] = self.version
-        env['MAKE'] = 'make'  # This removes the '-j5', which isn't safe
+        env['OPENSSL_VERSION'] = self.version[0]
         env['CC'] = 'clang'
         env['ANDROID_NDK_ROOT'] = self.ctx.ndk_dir
         env["PATH"] = f"{self.ctx.ndk.llvm_bin_dir}:{env['PATH']}"
+        env["CFLAGS"] += " -Wno-macro-redefined"
         return env
 
     def select_build_arch(self, arch):
