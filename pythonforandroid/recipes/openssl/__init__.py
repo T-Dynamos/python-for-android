@@ -1,4 +1,5 @@
 from os.path import join
+from multiprocessing import cpu_count
 
 from pythonforandroid.recipe import Recipe
 from pythonforandroid.util import current_directory
@@ -97,7 +98,8 @@ class OpenSSLRecipe(Recipe):
         env['OPENSSL_VERSION'] = self.version
         env['MAKE'] = 'make'  # This removes the '-j5', which isn't safe
         env['CC'] = 'clang'
-        env['ANDROID_NDK_HOME'] = self.ctx.ndk_dir
+        env['ANDROID_NDK_ROOT'] = self.ctx.ndk_dir
+        env["PATH"] = f"{self.ctx.ndk.llvm_bin_dir}:{env['PATH']}"
         return env
 
     def select_build_arch(self, arch):
@@ -125,13 +127,12 @@ class OpenSSLRecipe(Recipe):
                 'shared',
                 'no-dso',
                 'no-asm',
+                'no-tests',
                 buildarch,
                 '-D__ANDROID_API__={}'.format(self.ctx.ndk_api),
             ]
             shprint(perl, 'Configure', *config_args, _env=env)
-            self.apply_patch('disable-sover.patch', arch.arch)
-
-            shprint(sh.make, 'build_libs', _env=env)
+            shprint(sh.make, 'build_libs', '-j', str(cpu_count()) , _env=env)
 
 
 recipe = OpenSSLRecipe()

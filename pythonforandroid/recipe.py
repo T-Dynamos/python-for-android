@@ -28,6 +28,7 @@ from pythonforandroid.util import (
     current_directory, ensure_dir, BuildInterruptingException, rmdir, move,
     touch)
 from pythonforandroid.util import load_source as import_recipe
+from pythonforandroid.artifact import build_artifact
 
 
 url_opener = urllib.request.build_opener()
@@ -565,6 +566,7 @@ class Recipe(metaclass=RecipeMeta):
         if hasattr(self, build):
             getattr(self, build)()
 
+
     def install_libraries(self, arch):
         '''This method is always called after `build_arch`. In case that we
         detect a library recipe, defined by the class attribute
@@ -578,9 +580,17 @@ class Recipe(metaclass=RecipeMeta):
             lib for lib in self.get_libraries(arch) if lib.endswith(".so")
         ]
         
-        print( self.ctx.get_libs_dir(arch.arch), shared_libs)
+        build_artifact(
+            "/home/tdynamos/Downloads/t/",
+            self, 
+            arch,
+            shared_libs,
+            [],
+            [
+                {"LIBSCOPY": [shared_libs]}, 
+            ]
+        )
 
-        exit()
         self.install_libs(arch, *shared_libs)
 
     def postbuild_arch(self, arch):

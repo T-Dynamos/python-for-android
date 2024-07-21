@@ -26,6 +26,7 @@ class RecipeBuilder:
 
         self.ctx.ndk_api = 24
         self.ctx.android_api = 24
+        self.ctx.ndk_dir = "/home/tdynamos/.buildozer/android/platform/android-ndk-r25b"
 
     def build_recipes(self, recipes, archs):
         info_main(f"# Requested recipes: {Colo_Fore.BLUE}{recipes}")
@@ -42,17 +43,17 @@ class RecipeBuilder:
         recipes = [Recipe.get_recipe(recipe, self.ctx) for recipe in _recipes]
 
         self.ctx.recipe_build_order = recipes
-        for recipe in recipes:
-            recipe.download_if_necessary()
+        #for recipe in recipes:
+        #    recipe.download_if_necessary()
 
         for arch in self.ctx.archs:
             info_main("# Building all recipes for arch {}".format(arch.arch))
-
-            info_main("# Unpacking recipes")
-            for recipe in recipes:
-                ensure_dir(recipe.get_build_container_dir(arch.arch))
-                recipe.prepare_build_dir(arch.arch)
-
+            #
+            # info_main("# Unpacking recipes")
+            # for recipe in recipes:
+            #     ensure_dir(recipe.get_build_container_dir(arch.arch))
+            #     recipe.prepare_build_dir(arch.arch)
+            #
             info_main("# Prebuilding recipes")
             # 2) prebuild packages
             for recipe in recipes:
@@ -60,7 +61,6 @@ class RecipeBuilder:
                 recipe.prebuild_arch(arch)
                 recipe.apply_patches(arch)
 
-            # 3) build packages
             info_main("# Building recipes")
             for recipe in recipes:
                 info_main("Building {} for {}".format(recipe.name, arch.arch))
@@ -69,6 +69,8 @@ class RecipeBuilder:
                 else:
                     info("{} said it is already built, skipping".format(recipe.name))
                 recipe.install_libraries(arch)
+
+                input()
 
 if __name__ == "__main__":
     RecipeBuilder()
