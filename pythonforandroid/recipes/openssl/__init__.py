@@ -121,7 +121,8 @@ class OpenSSLRecipe(Recipe):
                 '-D__ANDROID_API__={}'.format(self.ctx.ndk_api),
             ]
             shprint(perl, 'Configure', *config_args, _env=env)
-            shprint(sh.make, 'build_libs', '-j', str(cpu_count()) , _env=env)
+            shprint(sh.make, '-j', str(cpu_count()), "depend", _env=env)
+            shprint(sh.make, '-j', str(cpu_count()), "_build_libs", _env=env)
 
 
 recipe = OpenSSLRecipe()
