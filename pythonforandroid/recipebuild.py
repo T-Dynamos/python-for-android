@@ -17,7 +17,7 @@ class RecipeBuilder:
         setup_color(True)
         self.build_dir = "/home/tdynamos/p4acache/"
         self.init_context()
-        self.build_recipes({"kivy"}, {"arm64-v8a"})
+        self.build_recipes({"libcurl","kivy"}, {"arm64-v8a"})
 
     def init_context(self):
         self.ctx = Context()
@@ -42,17 +42,17 @@ class RecipeBuilder:
         self.ctx.ndk = AndroidNDK("/home/tdynamos/.buildozer/android/platform/android-ndk-r25b")
         recipes = [Recipe.get_recipe(recipe, self.ctx) for recipe in _recipes]
 
-        self.ctx.recipe_build_order = recipes
-        # for recipe in recipes:
-        #    recipe.download_if_necessary()
+        self.ctx.recipe_build_order = _recipes
+        for recipe in recipes:
+           recipe.download_if_necessary()
 
         for arch in self.ctx.archs:
             info_main("# Building all recipes for arch {}".format(arch.arch))
-            #
-            # info_main("# Unpacking recipes")
-            # for recipe in recipes:
-            #     ensure_dir(recipe.get_build_container_dir(arch.arch))
-            #     recipe.prepare_build_dir(arch.arch)
+
+            info_main("# Unpacking recipes")
+            for recipe in recipes:
+                ensure_dir(recipe.get_build_container_dir(arch.arch))
+                recipe.prepare_build_dir(arch.arch)
 
             info_main("# Prebuilding recipes")
             # 2) prebuild packages

@@ -35,14 +35,13 @@ class HostPython3Recipe(Recipe):
         :class:`~pythonforandroid.python.HostPythonRecipe`
     '''
 
-    version = '3.12.4'
-    name = 'hostpython3'
+    version = '3.13.0b4'
+    url = 'https://github.com/python/cpython/archive/refs/tags/v{version}.tar.gz'
 
     build_subdir = 'native-build'
     '''Specify the sub build directory for the hostpython3 recipe. Defaults
     to ``native-build``.'''
 
-    url = 'https://www.python.org/ftp/python/{version}/Python-{version}.tgz'
     '''The default url to download our host python recipe. This url will
     change depending on the python version set in attribute :attr:`version`.'''
 
@@ -138,7 +137,9 @@ class HostPython3Recipe(Recipe):
                     shprint(sh.cp, exe, self.python_exe)
                     break
 
+
         self.ctx.hostpython = self.python_exe
+        shprint(sh.Command(self.python_exe), "-m", "ensurepip")
 
 
 recipe = HostPython3Recipe()

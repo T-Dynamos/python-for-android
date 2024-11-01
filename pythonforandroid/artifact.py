@@ -5,6 +5,9 @@ import subprocess
 
 
 class ArtifactName:
+
+    platform = "android"
+    
     def __init__(self, recipe, arch):
         self.recipe = recipe
         self._arch = arch
@@ -38,7 +41,7 @@ class ArtifactName:
             self.kind,
             self.recipe.name,
             self.arch,
-            self.native_api_level,
+            self.platform + self.native_api_level,
             self.recipe.version,
         ]
 

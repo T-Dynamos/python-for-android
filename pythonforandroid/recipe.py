@@ -580,16 +580,15 @@ class Recipe(metaclass=RecipeMeta):
             lib for lib in self.get_libraries(arch) if lib.endswith(".so")
         ]
         
-        build_artifact(
-            "/home/tdynamos/Downloads/t/",
-            self, 
-            arch,
-            shared_libs,
-            [],
-            [
-                {"LIBSCOPY": [shared_libs]}, 
-            ]
-        )
+        if self.ctx.save_prebuilt:
+            build_artifact(
+                self.ctx.prebuilt_dir,
+                self, 
+                arch,
+                shared_libs,
+                [],
+                [{"LIBSCOPY": [basename(lib) for lib in shared_libs]},]
+            )
 
         self.install_libs(arch, *shared_libs)
 
