@@ -12,7 +12,7 @@ class LibSDL2Recipe(BootstrapNDKRecipe):
 
     dir_name = 'SDL'
 
-    depends = ['sdl2_image', 'sdl2_mixer', 'sdl2_ttf']
+    depends = ['sdl2_image', 'sdl2_mixer', 'sdl2_ttf', 'python3']
 
     def get_recipe_env(self, arch=None, with_flags_in_cc=True, with_python=True):
         env = super().get_recipe_env(

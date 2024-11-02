@@ -8,6 +8,7 @@ from pathlib import Path
 from multiprocessing import cpu_count
 import shutil
 
+from packaging.version import Version
 from pythonforandroid.logger import info, warning, shprint
 from pythonforandroid.patching import version_starts_with
 from pythonforandroid.recipe import Recipe, TargetPythonRecipe
@@ -55,33 +56,34 @@ class Python3Recipe(TargetPythonRecipe):
         :class:`~pythonforandroid.python.GuestPythonRecipe`
     '''
 
-    version = '3.13.0b4'
+    version = '3.13.0'
+    _p_version = Version(version)
     url = 'https://github.com/python/cpython/archive/refs/tags/v{version}.tar.gz'
     name = 'python3'
 
+    # TODO: fix this version mess
     patches = [
-        'patches/pyconfig_detection.patch',
         'patches/reproducible-buildinfo.diff',
-
-        # Python 3.7.1
-        ('patches/py3.7.1_fix-ctypes-util-find-library.patch', version_starts_with("3.7")),
-        ('patches/py3.7.1_fix-zlib-version.patch', version_starts_with("3.7")),
-
-        # Python 3.8.1 & 3.9.X
-        ('patches/py3.8.1.patch', version_starts_with("3.8")),
-        ('patches/py3.8.1.patch', version_starts_with("3.9")),
-        ('patches/py3.8.1.patch', version_starts_with("3.10")),
-        ('patches/cpython-311-ctypes-find-library.patch', version_starts_with("3.11")),
+        # Python 3.7.x
+        *(['patches/py3.7.1_fix-ctypes-util-find-library.patch',
+                'patches/py3.7.1_fix-zlib-version.patch',
+                'patches/py3.7.1_fix_cortex_a8.patch'
+        ] if version.startswith("3.7") else []),
         
-        # Lld related
-        ("patches/py3.7.1_fix_cortex_a8.patch", version_starts_with("3.7")),
-        ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.8")),
-        ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.9")),
-        ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.10")),
-        ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.11")),
+        # Python >= 3.8.x patches
+        *([
+            'patches/py3.8.1.patch',
+            'patches/py3.8.1_fix_cortex_a8.patch'
+        ] if _p_version >= Version("3.8") and _p_version <= Version("3.11") else []),
+        
+        # Python >= 3.11.x patch
+        *([
+            f'patches/cpython-3{_p_version.minor}-ctypes-find-library.patch'
+        ] if _p_version >= Version("3.11") else [])
     ]
 
-    depends = ['hostpython3', 'sqlite3', 'openssl', 'libffi', 'libbz2', 'liblzma']
+
+    depends = ['hostpython3', 'sqlite3', 'openssl', 'libffi', 'libbz2', 'liblzma', 'libb2', 'util-linux']
     
     configure_args = [        
         '--host={android_host}',
@@ -90,7 +92,8 @@ class Python3Recipe(TargetPythonRecipe):
         '--enable-ipv6',
         '--enable-loadable-sqlite-extensions',
         '--without-ensurepip',
-        '--without-static-libpython', 
+        '--without-static-libpython',
+        '--without-readline',
         
         # Android prefix
         '--prefix={prefix}',
@@ -103,7 +106,7 @@ class Python3Recipe(TargetPythonRecipe):
         'ac_cv_little_endian_double=yes',
     ]
 
-    if version >= "3.11":
+    if _p_version >= Version("3.11"):
         configure_args.extend([
             '--with-build-python={python_host_bin}',
         ])
@@ -233,7 +236,16 @@ class Python3Recipe(TargetPythonRecipe):
             env['CPPFLAGS'] = env.get('CPPFLAGS', '') + include_flags
             env['LDFLAGS'] = env.get('LDFLAGS', '') + link_dirs
             env['LIBS'] = env.get('LIBS', '') + link_libs
-
+        
+        if self._p_version >= Version("3.11"):
+            # blake2 error fix
+            info('Activating flags for libb2 and libuuid')
+            add_flags(
+                ' -I' + join(Recipe.get_recipe('libb2', self.ctx).get_build_dir(arch.arch), "src")
+                + ' -I' + join(Recipe.get_recipe('util-linux', self.ctx).get_build_dir(arch.arch), "libuuid", "src"),
+                ' -L' +  self.ctx.get_libs_dir(arch.arch), ' -lb2 -luuid'
+            )
+        
         info('Activating flags for sqlite3')
         recipe = Recipe.get_recipe('sqlite3', self.ctx)
         add_flags(' -I' + recipe.get_build_dir(arch.arch),
@@ -330,11 +342,10 @@ class Python3Recipe(TargetPythonRecipe):
                                     exec_prefix=sys_exec_prefix)).split(' '),
                     _env=env)
 
-            # Python build does not seem to play well with make -j option from Python 3.11 and onwards
-            # Before losing some time, please check issue
-            # https://github.com/python/cpython/issues/101295 , as the root cause looks similar
             shprint(
                 sh.make,
+                '-j',
+                str(cpu_count()), 
                 'all',
                 'INSTSONAME={lib_name}'.format(lib_name=self._libpython),
                 _env=env

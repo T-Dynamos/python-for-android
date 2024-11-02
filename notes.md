@@ -9,4 +9,3 @@
 find -name "*.zip" -exec unzip -l {} \; | grep "\.so"
 ```
 
-https://github.com/kivy/kivy-sdk-packager/blob/master/win/build_sdl3.ps1#L64C1-L65C1

@@ -70,7 +70,7 @@ class RecipeBuilder:
                     info("{} said it is already built, skipping".format(recipe.name))
                 recipe.install_libraries(arch)
 
-                input()
+                # input()
 
 if __name__ == "__main__":
     RecipeBuilder()

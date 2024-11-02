@@ -62,7 +62,7 @@ class OpenSSLRecipe(Recipe):
         '''Returns a string with the include folders'''
         openssl_includes = join(self.get_build_dir(arch.arch), 'include')
         return (' -I' + openssl_includes +
-                ' -I' + join(openssl_includes, 'internal') +
+                # ' -I' + join(openssl_includes, 'internal') +
                 ' -I' + join(openssl_includes, 'openssl'))
 
     def link_dirs_flags(self, arch):

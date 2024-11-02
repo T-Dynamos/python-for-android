@@ -861,7 +861,8 @@ class PythonRecipe(Recipe):
 
     hostpython_prerequisites = []
     '''List of hostpython packages required to build a recipe'''
-
+    
+    _host_recipe = None
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if 'python3' not in self.depends:
@@ -873,6 +874,11 @@ class PythonRecipe(Recipe):
             depends.append('python3')
             depends = list(set(depends))
             self.depends = depends
+
+    def download_if_necessary(self):
+        # a little prep
+        self._host_recipe = Recipe.get_recipe("hostpython3", self.ctx)
+        return super().download_if_necessary()
 
     def clean_build(self, arch=None):
         super().clean_build(arch=arch)
@@ -891,8 +897,7 @@ class PythonRecipe(Recipe):
     def real_hostpython_location(self):
         host_name = 'host{}'.format(self.ctx.python_recipe.name)
         if host_name == 'hostpython3':
-            python_recipe = Recipe.get_recipe(host_name, self.ctx)
-            return python_recipe.python_exe
+            return self._host_recipe.python_exe
         else:
             python_recipe = self.ctx.python_recipe
             return 'python{}'.format(python_recipe.version)
@@ -918,7 +923,7 @@ class PythonRecipe(Recipe):
         # as it occasionally matters how Python e.g. reads files
         env['LANG'] = "en_GB.UTF-8"
         # Binaries made by packages installed by pip
-        env["PATH"] = join(self.hostpython_site_dir, "bin") + ":" + env["PATH"]
+        env["PATH"] = self._host_recipe.site_bin + ":" + env["PATH"]
 
         if not self.call_hostpython_via_targetpython:
             env['CFLAGS'] += ' -I{}'.format(
@@ -983,19 +988,14 @@ class PythonRecipe(Recipe):
 
     def get_hostrecipe_env(self, arch):
         env = environ.copy()
-        env['PYTHONPATH'] = self.hostpython_site_dir
+        env['PYTHONPATH'] = self._host_recipe.site_dir
         return env
-
-    @property
-    def hostpython_site_dir(self):
-        return join(dirname(self.real_hostpython_location), 'Lib', 'site-packages')
 
     def install_hostpython_package(self, arch):
         env = self.get_hostrecipe_env(arch)
         real_hostpython = sh.Command(self.real_hostpython_location)
         shprint(real_hostpython, 'setup.py', 'install', '-O2',
-                '--root={}'.format(dirname(self.real_hostpython_location)),
-                '--install-lib=Lib/site-packages',
+                '--root={}'.format(self._host_recipe.site_root),
                 _env=env, *self.setup_extra_args)
 
     @property
@@ -1013,7 +1013,7 @@ class PythonRecipe(Recipe):
         pip_options = [
             "install",
             *packages,
-            "--target", self.hostpython_site_dir, "--python-version",
+            "--target", self._host_recipe.site_dir, "--python-version",
             self.ctx.python_recipe.version,
             # Don't use sources, instead wheels
             "--only-binary=:all:",
@@ -1021,7 +1021,7 @@ class PythonRecipe(Recipe):
         if force_upgrade:
             pip_options.append("--upgrade")
         # Use system's pip
-        shprint(sh.pip, *pip_options)
+        shprint(sh.Command(), *pip_options)
 
     def restore_hostpython_prerequisites(self, packages):
         _packages = []
