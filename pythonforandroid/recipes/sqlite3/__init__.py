@@ -6,12 +6,14 @@ from pythonforandroid.util import ensure_dir
 
 
 class Sqlite3Recipe(NDKRecipe):
-    version = '3.35.5'
+    version = '3.46.0'
     # Don't forget to change the URL when changing the version
-    url = 'https://www.sqlite.org/2021/sqlite-amalgamation-3350500.zip'
+    url = 'https://sqlite.org/2024/sqlite-amalgamation-3460000.zip'
     generated_libraries = ['sqlite3']
+    built_libraries = {"libsqlite3.so": "."}
 
     def should_build(self, arch):
+        self.built_libraries["libsqlite3.so"] = join(self.get_build_dir(arch.arch), 'libs', arch.arch)
         return not self.has_libs(arch, 'libsqlite3.so')
 
     def prebuild_arch(self, arch):

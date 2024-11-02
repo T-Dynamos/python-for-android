@@ -5,7 +5,8 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from os.path import join
 
-from pythonforandroid.logger import shprint
+from packaging.version import Version
+from pythonforandroid.logger import shprint, info
 from pythonforandroid.recipe import Recipe
 from pythonforandroid.util import (
     BuildInterruptingException,
@@ -35,18 +36,16 @@ class HostPython3Recipe(Recipe):
         :class:`~pythonforandroid.python.HostPythonRecipe`
     '''
 
-    version = '3.11.5'
-    name = 'hostpython3'
+    version = '3.13.0'
+    _p_version = Version(version)
+    url = 'https://github.com/python/cpython/archive/refs/tags/v{version}.tar.gz'
 
     build_subdir = 'native-build'
     '''Specify the sub build directory for the hostpython3 recipe. Defaults
     to ``native-build``.'''
 
-    url = 'https://www.python.org/ftp/python/{version}/Python-{version}.tgz'
     '''The default url to download our host python recipe. This url will
     change depending on the python version set in attribute :attr:`version`.'''
-
-    patches = ['patches/pyconfig_detection.patch']
 
     @property
     def _exe_name(self):
@@ -94,6 +93,26 @@ class HostPython3Recipe(Recipe):
 
     def get_path_to_python(self):
         return join(self.get_build_dir(), self.build_subdir)
+    
+    @property
+    def site_root(self):
+        return join(self.get_path_to_python(), "root")
+    
+    @property 
+    def site_bin(self):
+        dir = None
+        # TODO: implement mac os
+        if os.name == "posix":
+            dir =  "usr/local/bin/"
+        return join(self.site_root, dir)
+
+    @property 
+    def site_dir(self):
+        dir = None
+        # TODO: implement mac os
+        if os.name == "posix":
+            dir = f"usr/local/lib/python{self._p_version.major}.{self._p_version.minor}/site-packages/"
+        return join(self.site_root, dir)
 
     def build_arch(self, arch):
         env = self.get_recipe_env(arch)
@@ -138,7 +157,9 @@ class HostPython3Recipe(Recipe):
                     shprint(sh.cp, exe, self.python_exe)
                     break
 
+        ensure_dir(self.site_root)
         self.ctx.hostpython = self.python_exe
+        shprint(sh.Command(self.python_exe), "-m", "ensurepip", "--root", self.site_root, "-U")
 
 
 recipe = HostPython3Recipe()

@@ -1,7 +1,7 @@
 from os.path import basename, dirname, exists, isdir, isfile, join, realpath, split
 import glob
+
 import hashlib
-import json
 from re import match
 
 import sh
@@ -12,6 +12,9 @@ import urllib.request
 from urllib.request import urlretrieve
 from os import listdir, unlink, environ, curdir, walk
 from sys import stdout
+from multiprocessing import cpu_count
+from wheel.wheelfile import WheelFile
+from wheel.cli.tags import tags as wheel_tags
 import time
 try:
     from urlparse import urlparse
@@ -24,8 +27,9 @@ from pythonforandroid.logger import (
     logger, info, warning, debug, shprint, info_main, error)
 from pythonforandroid.util import (
     current_directory, ensure_dir, BuildInterruptingException, rmdir, move,
-    touch, patch_wheel_setuptools_logging)
+    touch)
 from pythonforandroid.util import load_source as import_recipe
+from pythonforandroid.artifact import build_artifact
 
 
 url_opener = urllib.request.build_opener()
@@ -381,6 +385,10 @@ class Recipe(metaclass=RecipeMeta):
                 self.name, self.name))
             return
         self.download()
+    
+    @property
+    def download_dir(self):
+        return self.name + "_" + self.version
 
     def download(self):
         if self.url is None:
@@ -402,9 +410,9 @@ class Recipe(metaclass=RecipeMeta):
             if expected_digest:
                 expected_digests[alg] = expected_digest
 
-        ensure_dir(join(self.ctx.packages_path, self.name))
+        ensure_dir(join(self.ctx.packages_path, self.download_dir))
 
-        with current_directory(join(self.ctx.packages_path, self.name)):
+        with current_directory(join(self.ctx.packages_path, self.download_dir)):
             filename = shprint(sh.basename, url).stdout[:-1].decode('utf-8')
 
             do_download = True
@@ -478,7 +486,7 @@ class Recipe(metaclass=RecipeMeta):
 
             if not exists(directory_name) or not isdir(directory_name):
                 extraction_filename = join(
-                    self.ctx.packages_path, self.name, filename)
+                    self.ctx.packages_path, self.download_dir, filename)
                 if isfile(extraction_filename):
                     if extraction_filename.endswith(('.zip', '.whl')):
                         try:
@@ -587,6 +595,7 @@ class Recipe(metaclass=RecipeMeta):
         if hasattr(self, build):
             getattr(self, build)()
 
+
     def install_libraries(self, arch):
         '''This method is always called after `build_arch`. In case that we
         detect a library recipe, defined by the class attribute
@@ -595,9 +604,21 @@ class Recipe(metaclass=RecipeMeta):
         '''
         if not self.built_libraries:
             return
+
         shared_libs = [
             lib for lib in self.get_libraries(arch) if lib.endswith(".so")
         ]
+        
+        if self.ctx.save_prebuilt:
+            build_artifact(
+                self.ctx.prebuilt_dir,
+                self, 
+                arch,
+                shared_libs,
+                [],
+                [{"LIBSCOPY": [basename(lib) for lib in shared_libs]},]
+            )
+
         self.install_libs(arch, *shared_libs)
 
     def postbuild_arch(self, arch):
@@ -822,6 +843,8 @@ class NDKRecipe(Recipe):
             shprint(
                 sh.Command(join(self.ctx.ndk_dir, "ndk-build")),
                 'V=1',
+                "-j",
+                str(cpu_count()),
                 'NDK_DEBUG=' + ("1" if self.ctx.build_as_debuggable else "0"),
                 'APP_PLATFORM=android-' + str(self.ctx.ndk_api),
                 'APP_ABI=' + arch.arch,
@@ -869,7 +892,8 @@ class PythonRecipe(Recipe):
 
     hostpython_prerequisites = []
     '''List of hostpython packages required to build a recipe'''
-
+    
+    _host_recipe = None
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if 'python3' not in self.depends:
@@ -881,6 +905,10 @@ class PythonRecipe(Recipe):
             depends.append('python3')
             depends = list(set(depends))
             self.depends = depends
+
+    def prebuild_arch(self, arch):
+        self._host_recipe = Recipe.get_recipe("hostpython3", self.ctx)
+        return super().prebuild_arch(arch)
 
     def clean_build(self, arch=None):
         super().clean_build(arch=arch)
@@ -899,8 +927,7 @@ class PythonRecipe(Recipe):
     def real_hostpython_location(self):
         host_name = 'host{}'.format(self.ctx.python_recipe.name)
         if host_name == 'hostpython3':
-            python_recipe = Recipe.get_recipe(host_name, self.ctx)
-            return python_recipe.python_exe
+            return self._host_recipe.python_exe
         else:
             python_recipe = self.ctx.python_recipe
             return 'python{}'.format(python_recipe.version)
@@ -920,13 +947,18 @@ class PythonRecipe(Recipe):
         return name
 
     def get_recipe_env(self, arch=None, with_flags_in_cc=True):
+        if self._host_recipe is None:
+            self._host_recipe = Recipe.get_recipe("hostpython3", self.ctx)
+
         env = super().get_recipe_env(arch, with_flags_in_cc)
-        env['PYTHONNOUSERSITE'] = '1'
         # Set the LANG, this isn't usually important but is a better default
         # as it occasionally matters how Python e.g. reads files
         env['LANG'] = "en_GB.UTF-8"
         # Binaries made by packages installed by pip
-        env["PATH"] = join(self.hostpython_site_dir, "bin") + ":" + env["PATH"]
+        env["PATH"] = self._host_recipe.site_bin + ":" + env["PATH"]
+        
+        host_env = self.get_hostrecipe_env()
+        env['PYTHONPATH'] = host_env["PYTHONPATH"]
 
         if not self.call_hostpython_via_targetpython:
             env['CFLAGS'] += ' -I{}'.format(
@@ -936,24 +968,11 @@ class PythonRecipe(Recipe):
                 self.ctx.python_recipe.link_root(arch.arch),
                 self.ctx.python_recipe.link_version,
             )
-
-            hppath = []
-            hppath.append(join(dirname(self.hostpython_location), 'Lib'))
-            hppath.append(join(hppath[0], 'site-packages'))
-            builddir = join(dirname(self.hostpython_location), 'build')
-            if exists(builddir):
-                hppath += [join(builddir, d) for d in listdir(builddir)
-                           if isdir(join(builddir, d))]
-            if len(hppath) > 0:
-                if 'PYTHONPATH' in env:
-                    env['PYTHONPATH'] = ':'.join(hppath + [env['PYTHONPATH']])
-                else:
-                    env['PYTHONPATH'] = ':'.join(hppath)
         return env
 
     def should_build(self, arch):
         name = self.folder_name
-        if self.ctx.has_package(name, arch):
+        if self.ctx.has_package(name, arch) or name in listdir(self._host_recipe.site_dir):
             info('Python package already exists in site-packages')
             return False
         info('{} apparently isn\'t already in site-packages'.format(name))
@@ -980,30 +999,31 @@ class PythonRecipe(Recipe):
         hostpython = sh.Command(self.hostpython_location)
         hpenv = env.copy()
         with current_directory(self.get_build_dir(arch.arch)):
-            shprint(hostpython, 'setup.py', 'install', '-O2',
-                    '--root={}'.format(self.ctx.get_python_install_dir(arch.arch)),
-                    '--install-lib=.',
-                    _env=hpenv, *self.setup_extra_args)
+            if isfile("setup.py"):
+                shprint(hostpython, 'setup.py', 'install', '-O2',
 
-            # If asked, also install in the hostpython build dir
-            if self.install_in_hostpython:
-                self.install_hostpython_package(arch)
+                        '--root={}'.format(self.ctx.get_python_install_dir(arch.arch)),
+                        '--install-lib=.',
+                        _env=hpenv, *self.setup_extra_args)
 
-    def get_hostrecipe_env(self, arch):
+                # If asked, also install in the hostpython build dir
+                if self.install_in_hostpython:
+                    self.install_hostpython_package(arch)
+            else:
+                warning("`PythonRecipe.install_python_package` called without `setup.py` file!")
+
+    def get_hostrecipe_env(self):
         env = environ.copy()
-        env['PYTHONPATH'] = self.hostpython_site_dir
+        _python_path = self._host_recipe.get_path_to_python()
+        env['PYTHONPATH'] = self._host_recipe.site_dir + ":" + join(
+            _python_path, "Modules") + ":" + glob.glob(join(_python_path, "build", "lib*"))[0]
         return env
 
-    @property
-    def hostpython_site_dir(self):
-        return join(dirname(self.real_hostpython_location), 'Lib', 'site-packages')
-
     def install_hostpython_package(self, arch):
-        env = self.get_hostrecipe_env(arch)
+        env = self.get_hostrecipe_env()
         real_hostpython = sh.Command(self.real_hostpython_location)
         shprint(real_hostpython, 'setup.py', 'install', '-O2',
-                '--root={}'.format(dirname(self.real_hostpython_location)),
-                '--install-lib=Lib/site-packages',
+                '--root={}'.format(self._host_recipe.site_root),
                 _env=env, *self.setup_extra_args)
 
     @property
@@ -1011,7 +1031,7 @@ class PythonRecipe(Recipe):
         parsed_version = packaging.version.parse(self.ctx.python_recipe.version)
         return f"{parsed_version.major}.{parsed_version.minor}"
 
-    def install_hostpython_prerequisites(self, packages=None, force_upgrade=True):
+    def install_hostpython_prerequisites(self, packages=None, force_upgrade=True, arch=None):
         if not packages:
             packages = self.hostpython_prerequisites
 
@@ -1021,7 +1041,7 @@ class PythonRecipe(Recipe):
         pip_options = [
             "install",
             *packages,
-            "--target", self.hostpython_site_dir, "--python-version",
+            "--target", self._host_recipe.site_dir, "--python-version",
             self.ctx.python_recipe.version,
             # Don't use sources, instead wheels
             "--only-binary=:all:",
@@ -1029,7 +1049,7 @@ class PythonRecipe(Recipe):
         if force_upgrade:
             pip_options.append("--upgrade")
         # Use system's pip
-        shprint(sh.pip, *pip_options)
+        shprint(sh.Command(self.real_hostpython_location), "-m", "pip", *pip_options, _env=self.get_hostrecipe_env())
 
     def restore_hostpython_prerequisites(self, packages):
         _packages = []
@@ -1068,13 +1088,12 @@ class CompiledComponentsPythonRecipe(PythonRecipe):
                     env['STRIP'], '{}', ';', _env=env)
 
     def install_hostpython_package(self, arch):
-        env = self.get_hostrecipe_env(arch)
+        env = self.get_hostrecipe_env()
         self.rebuild_compiled_components(arch, env)
         super().install_hostpython_package(arch)
 
     def rebuild_compiled_components(self, arch, env):
         info('Rebuilding compiled components in {}'.format(self.name))
-
         hostpython = sh.Command(self.real_hostpython_location)
         shprint(hostpython, 'setup.py', 'clean', '--all', _env=env)
         shprint(hostpython, 'setup.py', self.build_cmd, '-v', _env=env,
@@ -1108,7 +1127,7 @@ class CythonRecipe(PythonRecipe):
 
         with current_directory(self.get_build_dir(arch.arch)):
             hostpython = sh.Command(self.ctx.hostpython)
-            shprint(hostpython, '-c', 'import sys; print(sys.path)', _env=env)
+            shprint(hostpython, '-c', 'import sys; print(sys.path, sys.exec_prefix, sys.prefix)', _env=env)
             debug('cwd is {}'.format(realpath(curdir)))
             info('Trying first build of {} to get cython files: this is '
                  'expected to fail'.format(self.name))
@@ -1198,7 +1217,7 @@ class CythonRecipe(PythonRecipe):
 
 
 class PyProjectRecipe(PythonRecipe):
-    """Recipe for projects which contain `pyproject.toml`"""
+    '''Recipe for projects which contain `pyproject.toml`'''
 
     # Extra args to pass to `python -m build ...`
     extra_build_args = []
@@ -1223,7 +1242,7 @@ class PyProjectRecipe(PythonRecipe):
         return env
 
     def get_wheel_platform_tag(self, arch):
-        return "android_" + {
+        return f"android_{self.ctx.ndk_api}_" + {
             "armeabi-v7a": "arm",
             "arm64-v8a": "aarch64",
             "x86_64": "x86_64",
@@ -1231,9 +1250,6 @@ class PyProjectRecipe(PythonRecipe):
         }[arch.arch]
 
     def install_wheel(self, arch, built_wheels):
-        with patch_wheel_setuptools_logging():
-            from wheel.cli.tags import tags as wheel_tags
-            from wheel.wheelfile import WheelFile
         _wheel = built_wheels[0]
         built_wheel_dir = dirname(_wheel)
         # Fix wheel platform tag
@@ -1244,17 +1260,19 @@ class PyProjectRecipe(PythonRecipe):
         )
         selected_wheel = join(built_wheel_dir, wheel_tag)
 
-        _dev_wheel_dir = environ.get("P4A_WHEEL_DIR", False)
-        if _dev_wheel_dir:
-            ensure_dir(_dev_wheel_dir)
-            shprint(sh.cp, selected_wheel, _dev_wheel_dir)
+        if self.ctx.save_prebuilt:
+            shprint(sh.cp, selected_wheel, self.ctx.prebuilt_dir)
+        
+        def _(arch, wheel_tag, selected_wheel):
+            info(f"Installing built wheel: {wheel_tag}")
+            destination = self.ctx.get_python_install_dir(arch.arch)
+            with WheelFile(selected_wheel) as wf:
+                for zinfo in wf.filelist:
+                    wf.extract(zinfo, destination)
+                wf.close()
 
-        info(f"Installing built wheel: {wheel_tag}")
-        destination = self.ctx.get_python_install_dir(arch.arch)
-        with WheelFile(selected_wheel) as wf:
-            for zinfo in wf.filelist:
-                wf.extract(zinfo, destination)
-            wf.close()
+        self.install_libraries = lambda arch, wheel_tag=wheel_tag, selected_wheel=selected_wheel : _(arch, wheel_tag, selected_wheel)
+
 
     def build_arch(self, arch):
         self.install_hostpython_prerequisites(
@@ -1282,6 +1300,7 @@ class PyProjectRecipe(PythonRecipe):
                 sh.Command(self.ctx.python_recipe.python_exe), *build_args, _env=env
             )
             built_wheels = [realpath(whl) for whl in glob.glob("dist/*.whl")]
+        
         self.install_wheel(arch, built_wheels)
 
 

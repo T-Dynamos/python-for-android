@@ -2,6 +2,7 @@ from os.path import exists, join
 
 from pythonforandroid.recipe import BootstrapNDKRecipe
 from pythonforandroid.toolchain import current_directory, shprint
+from multiprocessing import cpu_count
 import sh
 
 
@@ -12,7 +13,7 @@ class LibSDL2Recipe(BootstrapNDKRecipe):
 
     dir_name = 'SDL'
 
-    depends = ['sdl2_image', 'sdl2_mixer', 'sdl2_ttf']
+    depends = ['sdl2_image', 'sdl2_mixer', 'sdl2_ttf', 'python3']
 
     def get_recipe_env(self, arch=None, with_flags_in_cc=True, with_python=True):
         env = super().get_recipe_env(
@@ -32,6 +33,8 @@ class LibSDL2Recipe(BootstrapNDKRecipe):
             shprint(
                 sh.Command(join(self.ctx.ndk_dir, "ndk-build")),
                 "V=1",
+                "-j",
+                str(cpu_count()),
                 "NDK_DEBUG=" + ("1" if self.ctx.build_as_debuggable else "0"),
                 _env=env
             )

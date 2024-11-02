@@ -556,10 +556,11 @@ def _extract_info_from_package(dependency,
 
             # Get build requirements from pyproject.toml if requested:
             requirements = []
-            pyproject_toml_path = os.path.join(output_folder, 'pyproject.toml')
-            if os.path.exists(pyproject_toml_path) and include_build_requirements:
+            if os.path.exists(os.path.join(output_folder,
+                                           'pyproject.toml')
+                              ) and include_build_requirements:
                 # Read build system from pyproject.toml file: (PEP518)
-                with open(pyproject_toml_path) as f:
+                with open(os.path.join(output_folder, 'pyproject.toml')) as f:
                     build_sys = toml.load(f)['build-system']
                     if "requires" in build_sys:
                         requirements += build_sys["requires"]

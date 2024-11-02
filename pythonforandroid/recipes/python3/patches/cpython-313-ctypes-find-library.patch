@@ -1,0 +1,11 @@
+--- Python-3.13.0/Lib/ctypes/util.py	2024-10-07 10:32:14.000000000 +0530
++++ Python-3.11.5.mod/Lib/ctypes/util.py	2024-11-01 12:15:54.130409172 +0530
+@@ -97,6 +97,8 @@
+ 
+         fname = f"{directory}/lib{name}.so"
+         return fname if os.path.isfile(fname) else None
++    from android._ctypes_library_finder import find_library as _find_lib
++    find_library = _find_lib
+ 
+ elif os.name == "posix":
+     # Andreas Degert's find functions, using gcc, /sbin/ldconfig, objdump

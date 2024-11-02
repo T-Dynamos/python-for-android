@@ -5,8 +5,10 @@ import subprocess
 from os import environ, utime
 from os.path import dirname, exists, join
 from pathlib import Path
+from multiprocessing import cpu_count
 import shutil
 
+from packaging.version import Version
 from pythonforandroid.logger import info, warning, shprint
 from pythonforandroid.patching import version_starts_with
 from pythonforandroid.recipe import Recipe, TargetPythonRecipe
@@ -40,14 +42,13 @@ class Python3Recipe(TargetPythonRecipe):
         - _ctypes: you must add the recipe for ``libffi``.
         - _sqlite3: you must add the recipe for ``sqlite3``.
         - _ssl: you must add the recipe for ``openssl``.
-        - _bz2: you must add the recipe for ``libbz2`` (optional).
-        - _lzma: you must add the recipe for ``liblzma`` (optional).
+        - _bz2: you must add the recipe for ``libbz2``.
+        - _lzma: you must add the recipe for ``liblzma``.
 
     .. note:: This recipe can be built only against API 21+.
 
     .. versionchanged:: 2019.10.06.post0
         - Refactored from deleted class ``python.GuestPythonRecipe`` into here
-        - Added optional dependencies: :mod:`~pythonforandroid.recipes.libbz2`
           and :mod:`~pythonforandroid.recipes.liblzma`
 
     .. versionchanged:: 0.6.0
@@ -55,58 +56,61 @@ class Python3Recipe(TargetPythonRecipe):
         :class:`~pythonforandroid.python.GuestPythonRecipe`
     '''
 
-    version = '3.11.5'
-    url = 'https://www.python.org/ftp/python/{version}/Python-{version}.tgz'
+    version = '3.13.0'
+    _p_version = Version(version)
+    url = 'https://github.com/python/cpython/archive/refs/tags/v{version}.tar.gz'
     name = 'python3'
 
     patches = [
-        'patches/pyconfig_detection.patch',
         'patches/reproducible-buildinfo.diff',
-
-        # Python 3.7.1
-        ('patches/py3.7.1_fix-ctypes-util-find-library.patch', version_starts_with("3.7")),
-        ('patches/py3.7.1_fix-zlib-version.patch', version_starts_with("3.7")),
-
-        # Python 3.8.1 & 3.9.X
-        ('patches/py3.8.1.patch', version_starts_with("3.8")),
-        ('patches/py3.8.1.patch', version_starts_with("3.9")),
-        ('patches/py3.8.1.patch', version_starts_with("3.10")),
-        ('patches/cpython-311-ctypes-find-library.patch', version_starts_with("3.11")),
+        # Python 3.7.x
+        *(['patches/py3.7.1_fix-ctypes-util-find-library.patch',
+                'patches/py3.7.1_fix-zlib-version.patch',
+                'patches/py3.7.1_fix_cortex_a8.patch'
+        ] if version.startswith("3.7") else []),
+        
+        # Python < 3.11 patches
+        *([
+            'patches/py3.8.1.patch',
+            'patches/py3.8.1_fix_cortex_a8.patch'
+        ] if _p_version < Version("3.11") else []),
     ]
 
-    if shutil.which('lld') is not None:
-        patches += [
-            ("patches/py3.7.1_fix_cortex_a8.patch", version_starts_with("3.7")),
-            ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.8")),
-            ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.9")),
-            ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.10")),
-            ("patches/py3.8.1_fix_cortex_a8.patch", version_starts_with("3.11")),
-        ]
+    if _p_version >= Version("3.11") and _p_version < Version("3.13"):
+        # for 3.12 and 3.11
+        patches.append("patches/cpython-311-ctypes-find-library.patch")
 
-    depends = ['hostpython3', 'sqlite3', 'openssl', 'libffi']
-    # those optional depends allow us to build python compression modules:
-    #   - _bz2.so
-    #   - _lzma.so
-    opt_depends = ['libbz2', 'liblzma']
-    '''The optional libraries which we would like to get our python linked'''
+    if version_starts_with("3.13"):
+        # for 3.13
+        patches.append("patches/cpython-313-ctypes-find-library.patch")
 
-    configure_args = (
+    depends = ['hostpython3', 'sqlite3', 'openssl', 'libffi', 'libbz2', 'libb2', 'liblzma', 'util-linux']
+    
+    configure_args = [        
         '--host={android_host}',
         '--build={android_build}',
         '--enable-shared',
         '--enable-ipv6',
-        'ac_cv_file__dev_ptmx=yes',
-        'ac_cv_file__dev_ptc=no',
+        '--enable-loadable-sqlite-extensions',
         '--without-ensurepip',
-        'ac_cv_little_endian_double=yes',
-        'ac_cv_header_sys_eventfd_h=no',
+        '--without-static-libpython',
+        '--without-readline',
+        
+        # Android prefix
         '--prefix={prefix}',
         '--exec-prefix={exec_prefix}',
-        '--enable-loadable-sqlite-extensions'
-    )
+        
+            # Special cross compile args
+        'ac_cv_file__dev_ptmx=yes',
+        'ac_cv_file__dev_ptc=no',
+        'ac_cv_header_sys_eventfd_h=no',
+        'ac_cv_little_endian_double=yes',
+    ]
 
-    if version_starts_with("3.11"):
-        configure_args += ('--with-build-python={python_host_bin}',)
+    if _p_version >= Version("3.11"):
+        configure_args.extend([
+            '--with-build-python={python_host_bin}',
+        ])
 
     '''The configure arguments needed to build the python recipe. Those are
     used in method :meth:`build_arch` (if not overwritten like python3's
@@ -217,13 +221,10 @@ class Python3Recipe(TargetPythonRecipe):
         )
 
         env['LDFLAGS'] = env.get('LDFLAGS', '')
-        if shutil.which('lld') is not None:
-            # Note: The -L. is to fix a bug in python 3.7.
-            # https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=234409
-            env['LDFLAGS'] += ' -L. -fuse-ld=lld'
-        else:
-            warning('lld not found, linking without it. '
-                    'Consider installing lld if linker errors occur.')
+        # Note: The -L. is to fix a bug in python 3.7.
+        # https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=234409
+        env["PATH"] = f"{self.ctx.ndk.llvm_bin_dir}:{env['PATH']}" # find lld
+        env['LDFLAGS'] += ' -L. -fuse-ld=lld'
 
         return env
 
@@ -235,39 +236,53 @@ class Python3Recipe(TargetPythonRecipe):
             env['CPPFLAGS'] = env.get('CPPFLAGS', '') + include_flags
             env['LDFLAGS'] = env.get('LDFLAGS', '') + link_dirs
             env['LIBS'] = env.get('LIBS', '') + link_libs
+        
+        if self._p_version >= Version("3.11"):
+            info('Activating flags for libuuid')
+            add_flags(
+                ' -I' + join(Recipe.get_recipe('util-linux', self.ctx).get_build_dir(arch.arch), "libuuid", "src"),
+                ' -L' +  self.ctx.get_libs_dir(arch.arch),
+                ' -luuid'
+            )
+                
+            # blake2
+            if arch.arch not in ["x86_64", "x86"]:
+                info('Activating flags for libb2')
+                add_flags(
+                    ' -I' + join(Recipe.get_recipe('libb2', self.ctx).get_build_dir(arch.arch), "src"),
+                    '',
+                    ' -lb2'
+                )
 
-        if 'sqlite3' in self.ctx.recipe_build_order:
-            info('Activating flags for sqlite3')
-            recipe = Recipe.get_recipe('sqlite3', self.ctx)
-            add_flags(' -I' + recipe.get_build_dir(arch.arch),
-                      ' -L' + recipe.get_lib_dir(arch), ' -lsqlite3')
+        
+        info('Activating flags for sqlite3')
+        recipe = Recipe.get_recipe('sqlite3', self.ctx)
+        add_flags(' -I' + recipe.get_build_dir(arch.arch),
+                  ' -L' + recipe.get_lib_dir(arch), ' -lsqlite3')
 
-        if 'libffi' in self.ctx.recipe_build_order:
-            info('Activating flags for libffi')
-            recipe = Recipe.get_recipe('libffi', self.ctx)
-            # In order to force the correct linkage for our libffi library, we
-            # set the following variable to point where is our libffi.pc file,
-            # because the python build system uses pkg-config to configure it.
-            env['PKG_CONFIG_PATH'] = recipe.get_build_dir(arch.arch)
-            add_flags(' -I' + ' -I'.join(recipe.get_include_dirs(arch)),
-                      ' -L' + join(recipe.get_build_dir(arch.arch), '.libs'),
-                      ' -lffi')
+        info('Activating flags for libffi')
+        recipe = Recipe.get_recipe('libffi', self.ctx)
+        # In order to force the correct linkage for our libffi library, we
+        # set the following variable to point where is our libffi.pc file,
+        # because the python build system uses pkg-config to configure it.
+        env['PKG_CONFIG_PATH'] = recipe.get_build_dir(arch.arch)
+        add_flags(' -I' + ' -I'.join(recipe.get_include_dirs(arch)),
+                  ' -L' + join(recipe.get_build_dir(arch.arch), '.libs'),
+                  ' -lffi')
 
-        if 'openssl' in self.ctx.recipe_build_order:
-            info('Activating flags for openssl')
-            recipe = Recipe.get_recipe('openssl', self.ctx)
-            self.configure_args += \
-                ('--with-openssl=' + recipe.get_build_dir(arch.arch),)
-            add_flags(recipe.include_flags(arch),
-                      recipe.link_dirs_flags(arch), recipe.link_libs_flags())
+        info('Activating flags for openssl')
+        recipe = Recipe.get_recipe('openssl', self.ctx)
+        self.configure_args += \
+            ('--with-openssl=' + recipe.get_build_dir(arch.arch),)
+        add_flags(recipe.include_flags(arch),
+                  recipe.link_dirs_flags(arch), recipe.link_libs_flags())
 
         for library_name in {'libbz2', 'liblzma'}:
-            if library_name in self.ctx.recipe_build_order:
-                info(f'Activating flags for {library_name}')
-                recipe = Recipe.get_recipe(library_name, self.ctx)
-                add_flags(recipe.get_library_includes(arch),
-                          recipe.get_library_ldflags(arch),
-                          recipe.get_library_libs_flag())
+            info(f'Activating flags for {library_name}')
+            recipe = Recipe.get_recipe(library_name, self.ctx)
+            add_flags(recipe.get_library_includes(arch),
+                recipe.get_library_ldflags(arch),
+                recipe.get_library_libs_flag())
 
         # python build system contains hardcoded zlib version which prevents
         # the build of zlib module, here we search for android's zlib version
@@ -312,8 +327,8 @@ class Python3Recipe(TargetPythonRecipe):
         ensure_dir(build_dir)
 
         # TODO: Get these dynamically, like bpo-30386 does
-        sys_prefix = '/usr/local'
-        sys_exec_prefix = '/usr/local'
+        sys_prefix = "/usr/local/"
+        sys_exec_prefix = "/usr/local/"
 
         env = self.get_recipe_env(arch)
         env = self.set_libs_flags(env, arch)
@@ -321,6 +336,11 @@ class Python3Recipe(TargetPythonRecipe):
         android_build = sh.Command(
             join(recipe_build_dir,
                  'config.guess'))().strip()
+    
+        # disable blake2 for x86 and x86_64
+        if arch.arch in ["x86_64", "x86"]:
+            warning(f"blake2 disabled for {arch.arch}")
+            self.configure_args.append("--with-builtin-hashlib-hashes=md5,sha1,sha2,sha3")
 
         with current_directory(build_dir):
             if not exists('config.status'):
@@ -336,11 +356,10 @@ class Python3Recipe(TargetPythonRecipe):
                                     exec_prefix=sys_exec_prefix)).split(' '),
                     _env=env)
 
-            # Python build does not seem to play well with make -j option from Python 3.11 and onwards
-            # Before losing some time, please check issue
-            # https://github.com/python/cpython/issues/101295 , as the root cause looks similar
             shprint(
                 sh.make,
+                '-j',
+                str(cpu_count()), 
                 'all',
                 'INSTSONAME={lib_name}'.format(lib_name=self._libpython),
                 _env=env
@@ -374,7 +393,9 @@ class Python3Recipe(TargetPythonRecipe):
             self.get_build_dir(arch.arch),
             'android-build',
             'build',
-            'lib.linux{}-{}-{}'.format(
+            'lib.{}{}-{}-{}'.format(
+                # android is now supported platform
+                "android" if self._p_version >= Version("3.13") else "linux", 
                 '2' if self.version[0] == '2' else '',
                 arch.command_prefix.split('-')[0],
                 self.major_minor_version_string
