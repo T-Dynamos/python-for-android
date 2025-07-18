@@ -143,8 +143,14 @@ class Python3Recipe(TargetPythonRecipe):
         '__pycache__',
         'tests'
     }
-    '''The directories from site packages dir that we don't want to be included
+    '''the directories from site packages dir that we don't want to be included
     in our python bundle.'''
+
+    site_packages_excluded_dir_exceptions = [
+        'numpy',
+    ]
+    '''Directories from `site_packages_dir_blacklist` will not be excluded
+    if the full path contains any of these exceptions.'''
 
     site_packages_filen_blacklist = [
         '*.py'
@@ -419,7 +425,8 @@ class Python3Recipe(TargetPythonRecipe):
         with current_directory(self.ctx.get_python_install_dir(arch.arch)):
             filens = list(walk_valid_filens(
                 '.', self.site_packages_dir_blacklist,
-                self.site_packages_filen_blacklist))
+                self.site_packages_filen_blacklist,
+                excluded_dir_exceptions=self.site_packages_excluded_dir_exceptions))
             info("Copy {} files into the site-packages".format(len(filens)))
             for filen in filens:
                 info(" - copy {}".format(filen))
