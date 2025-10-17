@@ -1022,6 +1022,7 @@ class PythonRecipe(Recipe):
         with current_directory(self.get_build_dir(arch.arch)):
             shprint(hostpython, '-m', 'pip', 'install', '.',
                     '--compile',
+                    f'--target={self.ctx.get_python_install_dir(arch.arch)}',
                     _env=hpenv, *self.setup_extra_args
             )
 
@@ -1042,6 +1043,7 @@ class PythonRecipe(Recipe):
         real_hostpython = sh.Command(self.real_hostpython_location)
         shprint(real_hostpython, '-m', 'pip', 'install', '.',
                 '--compile',
+                f'--target={self.ctx.get_python_install_dir(arch.arch)}',
                 '--install-lib=Lib/site-packages',
                 _env=env, *self.setup_extra_args)
 
