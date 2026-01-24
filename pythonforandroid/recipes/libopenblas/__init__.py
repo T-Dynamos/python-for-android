@@ -11,8 +11,14 @@ class LibOpenBlasRecipe(Recipe):
 
     version = "0.3.29"
     url = "https://github.com/OpenMathLib/OpenBLAS/archive/refs/tags/v{version}.tar.gz"
+    depends = ["fortran"]
     built_libraries = {"libopenblas.so": "build/lib"}
     min_ndk_api_support = 24  # complex math functions support
+
+    def get_recipe_env(self, arch, *args, **kwargs):
+        env = super().get_recipe_env(*args, **kwargs)
+        env["FC"] = Recipe.get_recipe("fortran", self.ctx).get_fortran_bin(arch.arch)
+        return
 
     def build_arch(self, arch):
         source_dir = self.get_build_dir(arch.arch)

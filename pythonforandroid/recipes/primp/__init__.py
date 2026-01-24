@@ -3,7 +3,7 @@ from pythonforandroid.recipe import RustCompiledComponentsRecipe
 
 
 class PrimpRecipe(RustCompiledComponentsRecipe):
-    version = "v0.14.0"
+    version = "v0.15.0"
     url = "https://github.com/deedy5/primp/archive/refs/tags/{version}.tar.gz"
 
     def get_recipe_env_post(self, arch, **kwargs):

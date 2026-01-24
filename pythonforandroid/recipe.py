@@ -1489,6 +1489,9 @@ class RustCompiledComponentsRecipe(PyProjectRecipe):
             ).get_path_to_python(),
             old_path=env["PATH"],
         )
+
+        # required by some rust packages
+        env["ANDROID_API_LEVEL"] = str(self.ctx.ndk_api)
         return env
 
     def check_host_deps(self):

@@ -2,6 +2,7 @@ from os import environ
 from os.path import join
 from multiprocessing import cpu_count
 import shutil
+import glob
 
 from pythonforandroid.recipe import Recipe
 from pythonforandroid.util import BuildInterruptingException, build_platform
@@ -212,16 +213,13 @@ class Arch:
 
         # Host python (used by some recipes)
         hostpython_recipe = Recipe.get_recipe(
-            'host' + self.ctx.python_recipe.name, self.ctx)
-        env['BUILDLIB_PATH'] = join(
+            'hostpython3', self.ctx)
+        env['BUILDLIB_PATH'] = glob.glob(join(
             hostpython_recipe.get_build_dir(self.arch),
             'native-build',
             'build',
-            'lib.{}-{}'.format(
-                build_platform,
-                self.ctx.python_recipe.major_minor_version_string,
-            ),
-        )
+            'lib*',
+        ))[0]
 
         # for reproducible builds
         if 'SOURCE_DATE_EPOCH' in environ:
