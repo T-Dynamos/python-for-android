@@ -21,7 +21,7 @@ def is_kivy_affected_by_deadlock_issue(recipe=None, arch=None):
 
 
 class KivyRecipe(PyProjectRecipe):
-    version = '2.3.1'
+    version = '87c0e3d2e72169562cfbb9a243a43b75940439bf'
     url = 'https://github.com/kivy/kivy/archive/{version}.zip'
     name = 'kivy'
 
@@ -34,7 +34,7 @@ class KivyRecipe(PyProjectRecipe):
     # WARNING: Remove this patch when a new Kivy version is released.
     patches = [
         ("sdl-gl-swapwindow-nogil.patch", is_kivy_affected_by_deadlock_issue),
-        "use_cython.patch",
+        # "use_cython.patch",
         "no-ast-str.patch"
     ]
 
@@ -59,6 +59,7 @@ class KivyRecipe(PyProjectRecipe):
 
         # NDKPLATFORM is our switch for detecting Android platform, so can't be None
         env['NDKPLATFORM'] = "NOTNONE"
+        env["KIVY_CROSS_PLATFORM"] = "android"
         if 'sdl2' in self.ctx.recipe_build_order:
             env['USE_SDL2'] = '1'
             env['KIVY_SPLIT_EXAMPLES'] = '1'

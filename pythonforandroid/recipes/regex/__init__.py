@@ -1,13 +1,10 @@
-from pythonforandroid.recipe import CompiledComponentsPythonRecipe
+from pythonforandroid.recipe import PyProjectRecipe
 
 
-class RegexRecipe(CompiledComponentsPythonRecipe):
-    name = 'regex'
-    version = '2019.06.08'
-    url = 'https://pypi.python.org/packages/source/r/regex/regex-{version}.tar.gz'  # noqa
-
-    depends = ['setuptools']
-    call_hostpython_via_targetpython = False
+class RegexRecipe(PyProjectRecipe):
+    name = "regex"
+    version = "2026.1.15"
+    url = "https://github.com/mrabarnett/mrab-regex/archive/refs/tags/{version}.tar.gz"
 
 
 recipe = RegexRecipe()
