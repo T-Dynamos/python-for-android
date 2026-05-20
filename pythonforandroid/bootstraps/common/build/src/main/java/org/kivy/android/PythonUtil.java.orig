@@ -4,7 +4,6 @@ import java.io.InputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.File;
-import java.util.function.Consumer;
 
 import android.app.Activity;
 import android.content.Context;
@@ -129,8 +128,7 @@ public class PythonUtil {
         f.delete();
     }
 
-    public static boolean unpackAsset(
-        Consumer<Integer> func,
+    public static void unpackAsset(
         Context ctx,
         final String resource,
         File target,
@@ -146,7 +144,7 @@ public class PythonUtil {
 
         // If no version, no unpacking is necessary.
         if (dataVersion == null) {
-            return false;
+            return;
         }
 
         // Check the current disk version, if any.
@@ -193,9 +191,7 @@ public class PythonUtil {
             } catch (Exception e) {
                 Log.w(TAG, e);
             }
-            return true;
         }
-        return false;
     }
 
     public static void unpackPyBundle(

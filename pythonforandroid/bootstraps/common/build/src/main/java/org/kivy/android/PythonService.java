@@ -13,6 +13,7 @@ import android.app.Notification;
 import android.app.PendingIntent;
 import android.os.Process;
 import java.io.File;
+import android.content.pm.ServiceInfo; 
 
 //imports for channel definition
 import android.app.NotificationManager;
@@ -61,7 +62,7 @@ public class PythonService extends Service implements Runnable {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (pythonThread != null) {
-            Log.v("python service", "service exists, do not start again");
+            Log.v("python", "service exists, do not start again");
             return startType();
         }
 	//intent is null if OS restarts a STICKY service
@@ -112,21 +113,23 @@ public class PythonService extends Service implements Runnable {
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
 	// Unspecified icon uses default.
-	int smallIconId = context.getApplicationInfo().icon;
-    if (smallIconName != null) {
-        if (!smallIconName.equals("")){
-            int resId = getResources().getIdentifier(smallIconName, "mipmap",
-                                 getPackageName());
-            if (resId ==0) {
-            resId = getResources().getIdentifier(smallIconName, "drawable",
-                                 getPackageName());
-            }
-            if (resId !=0) {
-            smallIconId = resId;
-            }
-        }
-    }
-
+  int smallIconId = getResources().getIdentifier("logo_trans", "drawable",
+                             getPackageName());
+	//int smallIconId = context.getApplicationInfo().icon;
+	//   if (smallIconName != null) {
+	//       if (!smallIconName.equals("")){
+	//           int resId = getResources().getIdentifier(smallIconName, "mipmap",
+	//                                getPackageName());
+	//           if (resId ==0) {
+	//           resId = getResources().getIdentifier(smallIconName, "drawable",
+	//                                getPackageName());
+	//           }
+	//           if (resId !=0) {
+	//           smallIconId = resId;
+	//           }
+	//       }
+	//   }
+	//
 	if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
 	    // This constructor is deprecated
             notification = new Notification(
@@ -159,7 +162,13 @@ public class PythonService extends Service implements Runnable {
             builder.setSmallIcon(smallIconId);
             notification = builder.build();
         }
-        startForeground(getServiceId(), notification);
+        
+        if (Build.VERSION.SDK_INT < 33) {
+          startForeground(getServiceId(), notification);
+        } else {
+          // For android 14
+          startForeground(getServiceId(), notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+        }    
     }
 
     @Override

@@ -1,17 +1,26 @@
 package org.kivy.android;
-
 import java.io.InputStream;
 import java.io.FileWriter;
+import java.io.FileNotFoundException;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.function.Consumer;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
-
+import org.json.JSONException;
+import org.json.JSONObject;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import com.airbnb.lottie.LottieAnimationView;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -23,17 +32,27 @@ import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
 import android.view.inputmethod.InputMethodManager;
+import android.view.ActionMode;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
+import android.view.Menu;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.Toast;
+import android.widget.LinearLayout;
+import android.content.res.Configuration;
+import android.widget.RelativeLayout;
 import android.content.res.Resources.NotFoundException;
-
+import android.animation.ValueAnimator;
+import android.animation.ArgbEvaluator;
 import org.libsdl.app.SDLActivity;
+import com.airbnb.lottie.LottieAnimationView;
+import android.widget.TextView;
 
 import org.kivy.android.launcher.Project;
 
@@ -104,8 +123,35 @@ public class PythonActivity extends SDLActivity {
         protected String doInBackground(String... params) {
             File app_root_file = new File(params[0]);
             Log.v(TAG, "Ready to unpack");
-            PythonUtil.unpackAsset(mActivity, "private", app_root_file, true);
-            PythonUtil.unpackPyBundle(mActivity, getApplicationInfo().nativeLibraryDir + "/" + "libpybundle", app_root_file, false);
+            updateLoadingText("Unpacking files...");
+            Consumer<Integer> progressUpdate = (inte) -> updateLoadingText(inte.toString());
+            boolean should_init = PythonUtil.unpackAsset(
+               progressUpdate, 
+                mActivity,
+                "private", 
+                app_root_file, 
+                true
+            );
+            PythonUtil.unpackPyBundle(
+                mActivity, 
+                getApplicationInfo().nativeLibraryDir + "/" + "libpybundle", 
+                app_root_file, 
+                false
+              );
+            if (should_init) {
+              updateLoadingText("Initializing...");
+    // Create a Timer
+    Timer timer = new Timer();
+
+    // Schedule the task to update the loading text after 2 seconds
+    timer.schedule(new TimerTask() {
+        @Override
+        public void run() {
+            updateLoadingText("Loading...");
+        }
+    }, 6000); // 2000 milliseconds = 2 seconds 
+
+            } else {updateLoadingText("");}
             return null;
         }
 
@@ -124,7 +170,7 @@ public class PythonActivity extends SDLActivity {
             // removed the loading screen. However, we still need it to
             // show until the app is ready to render, so pop it back up
             // on top of the SDL view.
-            mActivity.showLoadingScreen(getLoadingScreen());
+            mActivity.showLoadingScreenAgain();
 
             String app_root_dir = getAppRoot();
             if (getIntent() != null && getIntent().getAction() != null &&
@@ -341,6 +387,7 @@ public class PythonActivity extends SDLActivity {
 
     /** Loading screen view **/
     public static ImageView mImageView = null;
+    public static LinearLayout SplashParent = null;
     public static View mLottieView = null;
     /** Whether main routine/actual app has started yet **/
     protected boolean mAppConfirmedActive = false;
@@ -398,24 +445,30 @@ public class PythonActivity extends SDLActivity {
                             });
                         }
                     };
-                    loadingScreenRemovalTimer = new Timer();
-                    loadingScreenRemovalTimer.schedule(removalTask, 5000);
                 }
             }
         });
     }
 
-    public void removeLoadingScreen() {
+    public void removeLoadingScreenMain() {
+        updateLoadingText("Running");
         runOnUiThread(new Runnable() {
             public void run() {
-                View view = mLottieView != null ? mLottieView : mImageView;
-                if (view != null && view.getParent() != null) {
-                    ((ViewGroup)view.getParent()).removeView(view);
-                    mLottieView = null;
-                    mImageView = null;
+                SplashParent.removeView(mLottieView);
+                SplashParent.setVisibility(View.GONE);
+                mLottieView = null;
+                mImageView = null;
                 }
-            }
-        });
+            });
+    }
+
+    public void removeLoadingScreen() {}
+
+    @Override
+    public void onActionModeStarted(ActionMode mode) {
+        Menu menu = mode.getMenu();
+        menu.removeGroup(menu.size() - 1);
+        super.onActionModeStarted(mode);
     }
 
     public String getEntryPoint(String search_dir) {
@@ -433,13 +486,27 @@ public class PythonActivity extends SDLActivity {
         return "main.py";
     }
 
-    protected void showLoadingScreen(View view) {
+    protected void showLoadingScreenAgain() {
+        if (SplashParent != null) {
+          mLayout.addView(SplashParent);
+        };
+    }
+
+    protected void showLoadingScreen(View[] views) {
         try {
-            if (mLayout == null) {
-                setContentView(view);
-            } else if (view.getParent() == null) {
-                mLayout.addView(view);
+            SplashParent = new LinearLayout(this);
+            addContentView(SplashParent, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.FILL_PARENT,
+                ViewGroup.LayoutParams.FILL_PARENT));
+            setBackgroundColor(SplashParent, "#FF00AD", false);
+            SplashParent.addView(views[0]);
+            SplashParent.addView(views[1]);
+            new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                animateStaticImage();
             }
+            }, 2500);
         } catch (IllegalStateException e) {
             // The loading screen can be attempted to be applied twice if app
             // is tabbed in/out, quickly.
@@ -448,62 +515,123 @@ public class PythonActivity extends SDLActivity {
         }
     }
 
-    protected void setBackgroundColor(View view) {
-        /*
-         * Set the presplash loading screen background color
-         * https://developer.android.com/reference/android/graphics/Color.html
-         * Parse the color string, and return the corresponding color-int.
-         * If the string cannot be parsed, throws an IllegalArgumentException exception.
-         * Supported formats are: #RRGGBB #AARRGGBB or one of the following names:
-         * 'red', 'blue', 'green', 'black', 'white', 'gray', 'cyan', 'magenta', 'yellow',
-         * 'lightgray', 'darkgray', 'grey', 'lightgrey', 'darkgrey', 'aqua', 'fuchsia',
-         * 'lime', 'maroon', 'navy', 'olive', 'purple', 'silver', 'teal'.
-         */
-        String backgroundColor = resourceManager.getString("presplash_color");
-        if (backgroundColor != null) {
+    private String readJson(String folder, String file_name){
+        StringBuilder sb = new StringBuilder();
+        try {
+            File file = new File(folder, file_name);
+            if (!file.exists()) {
+                return null;
+            }
+            FileInputStream fis = new FileInputStream(file);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
+            String line = "";
             try {
-                view.setBackgroundColor(Color.parseColor(backgroundColor));
-            } catch (IllegalArgumentException e) {}
+                line = reader.readLine();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            while (line != null) {
+                sb.append(line).append('\n');
+                try {
+                    line = reader.readLine();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            try {
+                reader.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        return sb.toString();
+    }
+
+    private Object readSettings(String key){
+        Object value = null;
+        try {
+            Object sb = readJson(getFilesDir().toString(), "settings.json");
+            if (sb == null) {
+                return sb;
+            }
+            JSONObject jsonObject = new JSONObject(sb.toString());
+            if (jsonObject.has(key)) {
+                value = jsonObject.get(key);
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return value;
+    }
+
+    protected void setBackgroundColor(View view, String color, boolean animate) {
+      String backgroundColor;
+      
+      backgroundColor = "#FF00AD";
+
+      if (backgroundColor != null) {
+          try {
+              int parsedColor = Color.parseColor(backgroundColor);
+              if (animate) {
+                  ValueAnimator colorAnimation = ValueAnimator.ofObject(new ArgbEvaluator(), view.getDrawingCacheBackgroundColor(), parsedColor);
+                  colorAnimation.setDuration(500);
+                  colorAnimation.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                      @Override
+                      public void onAnimationUpdate(ValueAnimator animator) {
+                          view.setBackgroundColor((int) animator.getAnimatedValue());
+                      }
+                  });
+                  colorAnimation.start();
+              } else {
+                  view.setBackgroundColor(parsedColor);
+              }
+          } catch (IllegalArgumentException e) {
+              e.printStackTrace();
+          }
+      }
+    }
+
+    private String getFiletheme(String dark_file, String light_file, String fallback) {
+        Object gtype = readSettings("gtype");
+        if (gtype == null) {
+            switch (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) {
+                case Configuration.UI_MODE_NIGHT_YES:
+                    return dark_file;
+                case Configuration.UI_MODE_NIGHT_NO:
+                    return light_file;
+                default:
+                    return fallback;
+            }
+        }
+        gtype = gtype.toString();
+        String grad = readSettings("grad").toString();
+        
+        if (gtype.equals("Basic")) {
+          if (grad.equals("Light")) {
+            return light_file;
+          } else { return dark_file;}
+        }
+
+        else {
+            if (Arrays.asList("Light", "Medium").contains(gtype)) {
+                return light_file;
+            } 
+            else {
+                return dark_file;
+            }
         }
     }
 
-    protected View getLoadingScreen() {
-        // If we have an mLottieView or mImageView already, then do
-        // nothing because it will have already been made the content
-        // view or added to the layout.
+    protected View[] getLoadingScreen() {
         if (mLottieView != null || mImageView != null) {
-            // we already have a splash screen
-            return mLottieView != null ? mLottieView : mImageView;
-        }
+            View[] _view = {mImageView, mLottieView};
+            return _view;
 
-        // first try to load the lottie one
-        try {
-            mLottieView = getLayoutInflater().inflate(
-                this.resourceManager.getIdentifier("lottie", "layout"),
-                mLayout,
-                false
-            );
-            try {
-                if (mLayout == null) {
-                    setContentView(mLottieView);
-                } else if (PythonActivity.mLottieView.getParent() == null) {
-                    mLayout.addView(mLottieView);
-                }
-            } catch (IllegalStateException e) {
-                // The loading screen can be attempted to be applied twice if app
-                // is tabbed in/out, quickly.
-                // (Gives error "The specified child already has a parent.
-                // You must call removeView() on the child's parent first.")
-            }
-            setBackgroundColor(mLottieView);
-            return mLottieView;
         }
-        catch (NotFoundException e) {
-            Log.v("SDL", "couldn't find lottie layout or animation, trying static splash");
-        }
-
-        // no lottie asset, try to load the static image then
-        int presplashId = this.resourceManager.getIdentifier("presplash", "drawable");
+        String filename = "fore"; //  getFiletheme("splash_dark", "splash_light", "splash_dark");
+        int presplashId = this.resourceManager.getIdentifier(filename , "drawable");
         InputStream is = this.getResources().openRawResource(presplashId);
         Bitmap bitmap = null;
         try {
@@ -513,16 +641,78 @@ public class PythonActivity extends SDLActivity {
                 is.close();
             } catch (IOException e) {};
         }
-
         mImageView = new ImageView(this);
         mImageView.setImageBitmap(bitmap);
-        setBackgroundColor(mImageView);
-
         mImageView.setLayoutParams(new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.FILL_PARENT,
-            ViewGroup.LayoutParams.FILL_PARENT));
+                ViewGroup.LayoutParams.FILL_PARENT,
+                ViewGroup.LayoutParams.FILL_PARENT));
         mImageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        return mImageView;
+        mLottieView = getLayoutInflater().inflate(
+        mActivity.resourceManager.getIdentifier("lottie", "layout"),
+        mLayout,
+        false
+        );
+        String filename_ = getFiletheme("splash_dark_lottie.json","splash_light_lottie.json","splash_dark_lottie.json");
+        LottieAnimationView lottieView = mLottieView.findViewById(mActivity.resourceManager.getIdentifier("progressBar", "id"));
+        
+        updateLoadingText("");
+        TextView loadingText = mLottieView.findViewById(
+            mActivity.resourceManager.getIdentifier("loadingText", "id")
+        );
+        if (filename_.equals("splash_dark_lottie.json")) {loadingText.setTextColor(Color.WHITE);} else {loadingText.setTextColor(Color.BLACK);}
+
+        lottieView.setAnimation(filename_);
+        lottieView.loop(true);
+        lottieView.playAnimation();
+        
+        mLottieView.setAlpha(0);
+        
+        View[] _view = {mImageView, mLottieView};
+        return _view;
+    }
+
+    public void updateLoadingText(String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (mLottieView != null) {
+                    TextView loadingText = mLottieView.findViewById(
+                        mActivity.resourceManager.getIdentifier("loadingText", "id")
+                    );
+                    if (loadingText != null) {
+                        loadingText.setText(text);
+                    } else {
+                        Log.e("python", "loadingText TextView not found");
+                    }
+                } else {
+                    Log.e("python", "mLottieView is null");
+                }
+            }
+        });
+    }
+
+
+    private void animateStaticImage() {
+        setBackgroundColor(SplashParent, "auto", true);
+        if (mImageView != null) {
+            mImageView.animate()
+                    .translationYBy(-500)
+                    .alpha(0)
+                    .setDuration(500)
+                    .withEndAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            SplashParent.removeView(mImageView);
+                            if (mLottieView != null) {
+                              mLottieView.animate().alpha(1).setDuration(700);
+                            }
+                        }
+                    })
+                    .start();
+        } else {
+            // Handle the case where mImageView is null
+            Log.e("animateStaticImage", "mImageView is null");
+        }
     }
 
     @Override

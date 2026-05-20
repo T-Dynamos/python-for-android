@@ -36,7 +36,7 @@ class HostPython3Recipe(Recipe):
         :class:`~pythonforandroid.python.HostPythonRecipe`
     '''
 
-    version = '3.14.0'
+    version = '3.13.5'
 
     url = 'https://github.com/python/cpython/archive/refs/tags/v{version}.tar.gz'
     '''The default url to download our host python recipe. This url will

@@ -54,7 +54,7 @@ class Python3Recipe(TargetPythonRecipe):
         :class:`~pythonforandroid.python.GuestPythonRecipe`
     '''
 
-    version = '3.14.0'
+    version = '3.13.5'
     _p_version = Version(version)
     url = 'https://github.com/python/cpython/archive/refs/tags/v{version}.tar.gz'
     name = 'python3'
@@ -75,9 +75,6 @@ class Python3Recipe(TargetPythonRecipe):
 
     if _p_version.minor >= 11:
         patches.append('patches/cpython-311-ctypes-find-library.patch')
-
-    if _p_version.minor >= 14:
-        patches.append('patches/3.14_armv7l_fix.patch')
 
     if shutil.which('lld') is not None:
         if _p_version.minor == 7:
@@ -389,12 +386,17 @@ class Python3Recipe(TargetPythonRecipe):
         place.
         """
         # Todo: find a better way to find the build libs folder
-        modules_build_dir = glob.glob(join(
+        modules_build_dir = join(
             self.get_build_dir(arch.arch),
             'android-build',
             'build',
-            'lib.*'
-        ))[0]
+            'lib.{}{}-{}-{}'.format(
+                # android is now supported platform
+                "android" if self._p_version.minor >= 13 else "linux",
+                '2' if self.version[0] == '2' else '',
+                arch.command_prefix.split('-')[0],
+                self.major_minor_version_string
+                ))
 
         # Compile to *.pyc the python modules
         self.compile_python_files(modules_build_dir)

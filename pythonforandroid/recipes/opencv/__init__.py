@@ -15,7 +15,7 @@ class OpenCVRecipe(NDKRecipe):
         build of most of the libraries of the opencv's package, so we can
         process images, videos, objects, photos...
     '''
-    version = '4.12.0'
+    version = '4.5.1'
     url = 'https://github.com/opencv/opencv/archive/{version}.zip'
     depends = ['numpy']
     patches = ['patches/p4a_build.patch']
@@ -68,9 +68,8 @@ class OpenCVRecipe(NDKRecipe):
             python_link_version = self.ctx.python_recipe.link_version
             python_library = join(python_link_root,
                                   'libpython{}.so'.format(python_link_version))
-            python_include_numpy = join(
-                self.ctx.get_python_install_dir(arch.arch), "numpy/_core/include",
-            )
+            python_include_numpy = join(python_site_packages,
+                                        'numpy', 'core', 'include')
 
             shprint(sh.cmake,
                     '-DP4A=ON',
@@ -137,15 +136,6 @@ class OpenCVRecipe(NDKRecipe):
 
                     self.get_build_dir(arch.arch),
                     _env=env)
-
-            # patch link.txt for unsupported flag
-            link_txt = 'modules/python3/CMakeFiles/opencv_python3.dir/link.txt'
-            with open(link_txt, 'r+') as f:
-                content = f.read().replace('-version', ' ')
-                f.seek(0)
-                f.write(content)
-                f.truncate()
-
             shprint(sh.make, '-j' + str(cpu_count()), 'opencv_python' + python_major)
             # Install python bindings (cv2.so)
             shprint(sh.cmake, '-DCOMPONENT=python', '-P', './cmake_install.cmake')

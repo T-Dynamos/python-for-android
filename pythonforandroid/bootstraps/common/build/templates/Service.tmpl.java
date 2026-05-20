@@ -27,7 +27,7 @@ public class Service{{ name|capitalize }} extends {{ base_service_class }} {
     }
 
     static public void start(Context ctx, String pythonServiceArgument) {
-        _start(ctx, "", "{{ args.name }}", "{{ name|capitalize }}", pythonServiceArgument);
+        _start(ctx, "", "ZAZU", "Keeping your feed up to date…", pythonServiceArgument);
     }
 
     static public void start(Context ctx, String smallIconName,
