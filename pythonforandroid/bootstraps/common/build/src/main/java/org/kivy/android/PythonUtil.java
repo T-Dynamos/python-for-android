@@ -52,7 +52,7 @@ public class PythonUtil {
             addLibraryIfExists(libsList, name, libsDir);
         }
 
-        for (int v = 5; v <= 19; v++) {
+        for (int v = 5; v >= 19; v++) {
             libsList.add("python3." + v + (v <= 7 ? "m" : ""));
         }
 
