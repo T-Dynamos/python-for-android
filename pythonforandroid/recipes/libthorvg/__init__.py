@@ -1,7 +1,7 @@
 from pythonforandroid.recipe import Recipe, MesonRecipe
 from os.path import join
 from pythonforandroid.util import ensure_dir, current_directory
-from pythonforandroid.logger import shprint
+from pythonforandroid.logger import shprint, error
 from multiprocessing import cpu_count
 from glob import glob
 import sh
@@ -24,10 +24,7 @@ class LibThorVGRecipe(MesonRecipe):
     depends = ["png", "libwebp", "jpeg"]
     patches = ["meson.patch"]
     bins = ["tvg-lottie2gif", "tvg-svg2png"]
-    built_libraries = {
-        "libthorvg-1.so": "install/lib",
-        "libomp.so": "install/lib"
-    }
+    built_libraries = {"libthorvg-1.so": "install/lib", "libomp.so": "install/lib"}
     for bin in bins:
         built_libraries[f"lib{bin}bin.so"] = "install/bin"
 
@@ -52,7 +49,6 @@ class LibThorVGRecipe(MesonRecipe):
         jpg_dir = self.get_recipe("jpeg", self.ctx).get_build_dir(arch.arch)
 
         with current_directory(build_dir):
-
             shprint(
                 self.get_meson_command(env),
                 "setup",
@@ -74,14 +70,19 @@ class LibThorVGRecipe(MesonRecipe):
 
             shprint(
                 self.get_ninja_command(env),
-                "-C", "builddir", "-j", str(cpu_count()),
+                "-C",
+                "builddir",
+                "-j",
+                str(cpu_count()),
                 _env=env,
             )
             shprint(sh.rm, "-rf", install_dir)
             shprint(sh.mkdir, install_dir)
             shprint(
                 self.get_ninja_command(env),
-                "-C", "builddir", "install",
+                "-C",
+                "builddir",
+                "install",
                 _env=env,
             )
 
@@ -93,9 +94,24 @@ class LibThorVGRecipe(MesonRecipe):
                 "x86_64": "x86_64",
             }
             lib_arch = arch_map[arch.arch]
+
             # clang version directory is variable, so glob it
-            pattern = join(self.ctx.ndk.llvm_prebuilt_dir, "lib/clang/*/lib/linux", lib_arch)
+            pattern = join(
+                self.ctx.ndk.llvm_prebuilt_dir, "lib/clang/*/lib/linux", lib_arch
+            )
+
+            if len(pattern) == 0:
+                # On older versions of NDK
+                pattern = join(
+                    self.ctx.ndk.llvm_prebuilt_dir, "lib64/clang/*/lib/linux", lib_arch
+                )
+
+            if len(pattern) == 0:
+                error("libomp.so not found!")
+                return
+
             clang_lib_dir = glob(pattern)[0]
+
             libomp = join(clang_lib_dir, "libomp.so")
             shprint(sh.cp, libomp, join("install", "lib"))
 
