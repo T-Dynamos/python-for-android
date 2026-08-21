@@ -95,22 +95,35 @@ class LibThorVGRecipe(MesonRecipe):
             }
             lib_arch = arch_map[arch.arch]
 
-            # clang version directory is variable, so glob it
-            pattern = join(
-                self.ctx.ndk.llvm_prebuilt_dir, "lib/clang/*/lib/linux", lib_arch
+            patterns = (
+                join(
+                    self.ctx.ndk.llvm_prebuilt_dir,
+                    "lib/clang/*/lib/linux",
+                    lib_arch,
+                    "libomp.so",
+                ),
+                join(
+                    self.ctx.ndk.llvm_prebuilt_dir,
+                    "lib64/clang/*/lib/linux",
+                    lib_arch,
+                    "libomp.so",
+                ),
             )
 
-            if len(clang_lib_dir := glob(pattern)) == 0:
-                # On older versions of NDK
-                pattern = join(
-                    self.ctx.ndk.llvm_prebuilt_dir, "lib64/clang/*/lib/linux", lib_arch
-                )
+            libomp_matches = []
 
-            if len(clang_lib_dir := glob(pattern)) == 0:
-                error("libomp.so not found!")
+            for pattern in patterns:
+                libomp_matches.extend(glob(pattern))
+
+            if not libomp_matches:
+                searched = "\n".join(f"  - {pattern}" for pattern in patterns)
+                error(
+                    f"libomp.so not found for architecture: {lib_arch}\n"
+                    f"Searched:\n{searched}"
+                )
                 return
 
-            libomp = join(clang_lib_dir[0], "libomp.so")
+            libomp = sorted(libomp_matches)[-1]
             shprint(sh.cp, libomp, join("install", "lib"))
 
             # setup bins
