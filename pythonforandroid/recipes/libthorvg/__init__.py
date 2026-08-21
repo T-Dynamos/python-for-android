@@ -100,19 +100,17 @@ class LibThorVGRecipe(MesonRecipe):
                 self.ctx.ndk.llvm_prebuilt_dir, "lib/clang/*/lib/linux", lib_arch
             )
 
-            if len(pattern) == 0:
+            if len(clang_lib_dir := glob(pattern)) == 0:
                 # On older versions of NDK
                 pattern = join(
                     self.ctx.ndk.llvm_prebuilt_dir, "lib64/clang/*/lib/linux", lib_arch
                 )
 
-            if len(pattern) == 0:
+            if len(clang_lib_dir := glob(pattern)) == 0:
                 error("libomp.so not found!")
                 return
 
-            clang_lib_dir = glob(pattern)[0]
-
-            libomp = join(clang_lib_dir, "libomp.so")
+            libomp = join(clang_lib_dir[0], "libomp.so")
             shprint(sh.cp, libomp, join("install", "lib"))
 
             # setup bins
