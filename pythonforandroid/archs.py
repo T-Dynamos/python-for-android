@@ -209,6 +209,7 @@ class Arch:
 
         # Custom linker options
         env['LDSHARED'] = env['CC'] + ' ' + ' '.join(self.common_ldshared)
+        env['LDCXXSHARED'] = env['CXX'] + ' ' + ' '.join(self.common_ldshared)
 
         # Host python (used by some recipes)
         hostpython_recipe = Recipe.get_recipe(

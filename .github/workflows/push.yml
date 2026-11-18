@@ -19,9 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout python-for-android
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Set up Python 3.x
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: 3.x
     - name: Run flake8
@@ -35,9 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout python-for-android
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Set up Java 17
-      uses: actions/setup-java@v5
+      uses: actions/setup-java@v6
       with:
         distribution: 'temurin'
         java-version: '17'
@@ -58,9 +58,9 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
     - name: Checkout python-for-android
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
@@ -82,7 +82,7 @@ jobs:
     runs-on: ${{ matrix.runs_on }}
     strategy:
       matrix:
-        runs_on: [ubuntu-latest]
+        runs_on: [ubuntu-24.04]
         bootstrap:
           - name: sdl2
             target: testapps-with-numpy
@@ -106,14 +106,20 @@ jobs:
         remove-codeql: 'true'
         remove-docker-images: 'true'
     - name: Checkout python-for-android
-      uses: actions/checkout@v6
-    - name: Relocate Docker data directory
+      uses: actions/checkout@v7
+    - name: Configure classic Docker storage on build volume
       run: |
         sudo systemctl stop docker
         sudo mkdir -p "${GITHUB_WORKSPACE}/docker-data"
-        echo '{"data-root": "'${GITHUB_WORKSPACE}/docker-data'"}' | sudo tee /etc/docker/daemon.json
+        sudo tee /etc/docker/daemon.json <<EOF
+        {
+          "data-root": "${GITHUB_WORKSPACE}/docker-data",
+          "features": {"containerd-snapshotter": false}
+        }
+        EOF
         sudo systemctl start docker
-        docker info | grep "Docker Root Dir"
+        docker info --format 'Storage driver: {{ .Driver }}; Docker root: {{ .DockerRootDir }}'
+        test "$(docker info --format '{{ .Driver }}')" = overlay2
     - name: Build python-for-android docker image
       run: |
         docker build --tag=kivy/python-for-android .
@@ -163,9 +169,9 @@ jobs:
       ANDROID_NDK_HOME: ${HOME}/.android/android-ndk
     steps:
       - name: Checkout python-for-android
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Set up Python 3.x
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.x
       - name: Install python-for-android
@@ -202,11 +208,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Download Artifacts
         uses: actions/download-artifact@v8
         with:
-          name: ubuntu-latest-sdl2-artifacts
+          name: ubuntu-24.04-sdl2-artifacts
           path: dist/
 
       - name: Setup and start Android Emulator
@@ -217,9 +223,9 @@ jobs:
           script: ci/run_emulator_tests.sh
 
   ubuntu_rebuild_updated_recipes:
-    name: Test updated recipes for arch ${{ matrix.android_arch }} [ ubuntu-latest ]
+    name: Test updated recipes for arch ${{ matrix.android_arch }} [ ubuntu-24.04 ]
     needs: [flake8, spotless]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # continue on error to see failures across all architectures
     continue-on-error: true
     strategy:
@@ -239,16 +245,22 @@ jobs:
         remove-codeql: 'true'
         remove-docker-images: 'true'
     - name: Checkout python-for-android (all-history)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
-    - name: Relocate Docker data directory
+    - name: Configure classic Docker storage on build volume
       run: |
         sudo systemctl stop docker
         sudo mkdir -p "${GITHUB_WORKSPACE}/docker-data"
-        echo '{"data-root": "'${GITHUB_WORKSPACE}/docker-data'"}' | sudo tee /etc/docker/daemon.json
+        sudo tee /etc/docker/daemon.json <<EOF
+        {
+          "data-root": "${GITHUB_WORKSPACE}/docker-data",
+          "features": {"containerd-snapshotter": false}
+        }
+        EOF
         sudo systemctl start docker
-        docker info | grep "Docker Root Dir"
+        docker info --format 'Storage driver: {{ .Driver }}; Docker root: {{ .DockerRootDir }}'
+        test "$(docker info --format '{{ .Driver }}')" = overlay2
     - name: Pull docker image
       run: |
         make docker/pull
@@ -276,11 +288,11 @@ jobs:
       REBUILD_UPDATED_RECIPES_EXTRA_ARGS: --arch=${{ matrix.android_arch }}
     steps:
       - name: Checkout python-for-android (all-history)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up Python 3.x
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.x
       - name: Install python-for-android
@@ -308,7 +320,7 @@ jobs:
   documentation:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Requirements
       run: |
         python -m pip install --upgrade pip
@@ -317,4 +329,3 @@ jobs:
       run: sphinx-build -b linkcheck doc/source doc/build
     - name: Generate documentation
       run: sphinx-build doc/source doc/build
-

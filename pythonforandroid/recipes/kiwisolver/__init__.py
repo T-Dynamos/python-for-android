@@ -9,12 +9,11 @@ class KiwiSolverRecipe(PyProjectRecipe):
     need_stl_shared = True
 
     def get_recipe_env(self, arch, **kwargs):
-        """Override compile and linker flags, refs: #3115 and #3122"""
+        """Add the Python include path, refs: #3115."""
         env = super().get_recipe_env(arch, **kwargs)
         flags = " -I" + self.ctx.python_recipe.include_root(arch.arch)
         env["CFLAGS"] += flags
         env["CPPFLAGS"] += flags
-        env["LDFLAGS"] += " -shared"
         return env
 
 

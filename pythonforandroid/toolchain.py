@@ -333,6 +333,20 @@ class ToolchainCL:
             default='')
 
         generic_parser.add_argument(
+            '--use-setup-py', dest="use_setup_py",
+            action='store_true', default=False,
+            help="Process the setup.py of a project if present. " +
+                 "(Experimental!")
+        generic_parser.add_argument(
+            '--ignore-setup-py', dest="ignore_setup_py",
+            action='store_true', default=False,
+            help="Don't run the setup.py of a project if present. " +
+                 "This may be required if the setup.py is not " +
+                 "designed to work inside p4a (e.g. by installing " +
+                 "dependencies that won't work or aren't desired " +
+                 "on Android")
+
+        generic_parser.add_argument(
             '--bootstrap',
             help='The bootstrap to build with. Leave unset to choose '
                  'automatically.',
@@ -381,6 +395,13 @@ class ToolchainCL:
             choices=['auto', 'ant', 'gradle'],
             help=('The java build tool to use when packaging the APK, defaults '
                   'to automatically selecting an appropriate tool.'))
+
+        # Also an argument of the bootstrap build.py
+        generic_parser.add_argument(
+            '--no-optimize-python', dest='optimize_python',
+            action='store_false', default=True,
+            help=('Whether to compile to optimised .pyc files, using -OO '
+                  '(strips docstrings and asserts)'))
 
         add_boolean_option(
             generic_parser, ['copy-libs'],
@@ -497,19 +518,7 @@ class ToolchainCL:
             help='the directory with the app source code files' +
                  ' (containing your main.py entrypoint)',
             required=False, default=None)
-        parser_packaging.add_argument(
-            '--use-setup-py', dest="use_setup_py",
-            action='store_true', default=False,
-            help="Process the setup.py of a project if present. " +
-                 "(Experimental!")
-        parser_packaging.add_argument(
-            '--ignore-setup-py', dest="ignore_setup_py",
-            action='store_true', default=False,
-            help="Don't run the setup.py of a project if present. " +
-                 "This may be required if the setup.py is not " +
-                 "designed to work inside p4a (e.g. by installing " +
-                 "dependencies that won't work or aren't desired " +
-                 "on Android")
+
         parser_packaging.add_argument(
             '--release', dest='build_mode', action='store_const',
             const='release', default='debug',
@@ -590,6 +599,8 @@ class ToolchainCL:
             args.unknown_args += ["--release"]
         if getattr(args, "with_debug_symbols", False):
             args.unknown_args += ["--with-debug-symbols"]
+        if not getattr(args, "optimize_python", True):
+            args.unknown_args += ["--no-optimize-python"]
         if getattr(args, "ignore_setup_py", False):
             args.use_setup_py = False
         if getattr(args, "activity_class_name", "org.kivy.android.PythonActivity") != 'org.kivy.android.PythonActivity':
@@ -616,6 +627,7 @@ class ToolchainCL:
         self.ctx.with_debug_symbols = getattr(
             args, "with_debug_symbols", False
         )
+        self.ctx.optimize_python = getattr(args, "optimize_python", True)
 
         # Process requirements and put version in environ
         if hasattr(args, 'requirements'):
